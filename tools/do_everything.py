@@ -399,14 +399,40 @@ def do_everything(root_folder, url, num_videos=5, resolution='1080p',
             for detail in error_details:
                 logger.info(f"  - {detail}")
 
-        return f'成功: {len(success_list)}\n失败: {len(fail_list)}', out_video
+        # 添加调试信息和安全检查
+        logger.info(f"准备返回结果，out_video: {out_video}")
+        
+        # 检查视频文件
+        if out_video and os.path.exists(out_video):
+            file_size = os.path.getsize(out_video) / (1024 * 1024)  # MB
+            logger.info(f"输出视频文件: {out_video}, 大小: {file_size:.2f} MB")
+            
+            # 如果文件太大，只返回路径信息而不是文件本身
+            if file_size > 100:  # 超过100MB时只返回路径
+                logger.warning(f"视频文件过大({file_size:.2f} MB)，只返回路径信息")
+                result_video = out_video  # 返回路径而不是文件对象
+            else:
+                result_video = out_video
+        else:
+            logger.warning(f"输出视频不存在或为空: {out_video}")
+            result_video = None
+
+        status_message = f'成功: {len(success_list)}\n失败: {len(fail_list)}'
+        logger.info(f"即将返回: 状态='{status_message}', 视频={result_video}")
+        
+        return status_message, result_video
 
     except Exception as e:
         # 捕获整体处理过程中的任何错误
         stack_trace = traceback.format_exc()
         error_msg = f"处理过程中发生错误: {str(e)}\n{stack_trace}"
         logger.error(error_msg)
+        logger.info("异常处理：即将返回错误信息")
         return error_msg, None
+    
+    finally:
+        # 确保在任何情况下都能记录函数结束
+        logger.info("do_everything函数执行结束")
 
 
 if __name__ == '__main__':

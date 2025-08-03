@@ -6,11 +6,51 @@ from tools.step030_translation import translate_all_transcript_under_folder
 from tools.step040_tts import generate_all_wavs_under_folder
 from tools.step050_synthesize_video import synthesize_all_video_under_folder
 from tools.do_everything import do_everything
+import threading
+import queue
+import time
 from tools.utils import SUPPORT_VOICE
+
+def do_everything_with_timeout(*args, timeout=300, **kwargs):
+    """
+    带超时的do_everything包装函数，避免界面卡死
+    """
+    result_queue = queue.Queue()
+    exception_queue = queue.Queue()
+    
+    def target():
+        try:
+            result = do_everything(*args, **kwargs)
+            result_queue.put(result)
+        except Exception as e:
+            exception_queue.put(e)
+    
+    # 启动线程
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    
+    # 等待结果或超时
+    thread.join(timeout)
+    
+    if thread.is_alive():
+        # 超时情况
+        return "处理超时，请检查系统资源或重试", None
+    
+    # 检查是否有异常
+    if not exception_queue.empty():
+        e = exception_queue.get()
+        return f"处理失败: {str(e)}", None
+    
+    # 检查是否有结果
+    if not result_queue.empty():
+        return result_queue.get()
+    else:
+        return "处理完成但未返回结果", None
 
 # 一键自动化界面
 full_auto_interface = gr.Interface(
-    fn=do_everything,
+    fn=do_everything_with_timeout,
     inputs=[
         gr.Textbox(label='视频输出文件夹', value='videos'),
         gr.Textbox(label='视频URL', placeholder='请输入Youtube或Bilibili的视频、播放列表或频道的URL', 
