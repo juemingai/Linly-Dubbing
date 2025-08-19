@@ -24,12 +24,39 @@ def preprocess_text(text):
     
     
 def adjust_audio_length(wav_path, desired_length, sample_rate = 24000, min_speed_factor = 0.6, max_speed_factor = 1.1):
+    # 检查文件是否存在
+    if not os.path.exists(wav_path):
+        logger.error(f'音频文件不存在: {wav_path}')
+        # 检查是否有MP3版本
+        mp3_path = wav_path.replace('.wav', '.mp3')
+        if os.path.exists(mp3_path):
+            wav_path = mp3_path
+            logger.info(f'使用MP3文件: {wav_path}')
+        else:
+            logger.error(f'音频文件和MP3文件都不存在: {wav_path}')
+            # 创建一个短的静音音频作为后备
+            empty_audio = np.zeros(int(desired_length * sample_rate))
+            return empty_audio, desired_length
+    
     try:
         wav, sample_rate = librosa.load(wav_path, sr=sample_rate)
     except Exception as e:
+        logger.error(f'加载音频文件失败: {wav_path}, 错误: {e}')
+        # 尝试加载MP3文件
         if wav_path.endswith('.wav'):
             wav_path = wav_path.replace('.wav', '.mp3')
-        wav, sample_rate = librosa.load(wav_path, sr=sample_rate)
+            try:
+                wav, sample_rate = librosa.load(wav_path, sr=sample_rate)
+                logger.info(f'成功加载MP3文件: {wav_path}')
+            except Exception as e2:
+                logger.error(f'加载MP3文件也失败: {wav_path}, 错误: {e2}')
+                # 创建静音音频作为后备
+                empty_audio = np.zeros(int(desired_length * sample_rate))
+                return empty_audio, desired_length
+        else:
+            # 创建静音音频作为后备
+            empty_audio = np.zeros(int(desired_length * sample_rate))
+            return empty_audio, desired_length
     current_length = len(wav)/sample_rate
     speed_factor = max(
         min(desired_length / current_length, max_speed_factor), min_speed_factor)
@@ -88,7 +115,15 @@ def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-Xiaox
         elif method == 'cosyvoice':
             cosyvoice_tts(text, output_path, speaker_wav, target_language = target_language)
         elif method == 'EdgeTTS':
-            edge_tts(text, output_path, target_language = target_language, voice = voice)
+            success = edge_tts(text, output_path, target_language = target_language, voice = voice)
+            if not success:
+                logger.error(f'EdgeTTS生成失败: {text}')
+                # 创建一个空的音频文件以避免后续错误
+                import numpy as np
+                from .utils import save_wav
+                empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
+                save_wav(empty_audio, output_path)
+                logger.info(f'已创建静音文件: {output_path}')
         start = line['start']
         end = line['end']
         length = end-start
