@@ -5,16 +5,18 @@ import torch
 import time
 from .utils import save_wav
 import sys
-sys.path.append('CosyVoice/third_party/Matcha-TTS')
-sys.path.append('CosyVoice/')
-from cosyvoice.cli.cosyvoice import CosyVoice
-from cosyvoice.utils.file_utils import load_wav
 import torchaudio
-from modelscope import snapshot_download
+
+# CosyVoice相关导入放在函数内部，避免启动时错误
 model = None
 
 def download_cosyvoice():
-    snapshot_download('iic/CosyVoice-300M', local_dir='models/TTS/CosyVoice-300M')
+    try:
+        from modelscope import snapshot_download
+        snapshot_download('iic/CosyVoice-300M', local_dir='models/TTS/CosyVoice-300M')
+    except ImportError as e:
+        logger.error(f"Failed to import modelscope: {e}")
+        raise
 
 def init_cosyvoice():
     load_model()
@@ -24,15 +26,25 @@ def load_model(model_path="models/TTS/CosyVoice-300M", device='auto'):
     if model is not None:
         return
 
-    if device=='auto':
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    logger.info(f'Loading CoxyVoice model from {model_path}')
-    t_start = time.time()
-    if not os.path.exists(model_path):
-        download_cosyvoice()
-    model = CosyVoice(model_path)
-    t_end = time.time()
-    logger.info(f'CoxyVoice model loaded in {t_end - t_start:.2f}s')
+    try:
+        # 在使用时才导入CosyVoice相关模块
+        sys.path.append('CosyVoice/third_party/Matcha-TTS')
+        sys.path.append('CosyVoice/')
+        from cosyvoice.cli.cosyvoice import CosyVoice
+        
+        if device=='auto':
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        logger.info(f'Loading CoxyVoice model from {model_path}')
+        t_start = time.time()
+        if not os.path.exists(model_path):
+            download_cosyvoice()
+        model = CosyVoice(model_path)
+        t_end = time.time()
+        logger.info(f'CoxyVoice model loaded in {t_end - t_start:.2f}s')
+    except ImportError as e:
+        logger.error(f"Failed to import CosyVoice: {e}")
+        logger.info("Please install CosyVoice if you want to use this TTS method")
+        raise
     
 #  <|zh|><|en|><|jp|><|yue|><|ko|> for Chinese/English/Japanese/Cantonese/Korean
 language_map = {
@@ -50,20 +62,28 @@ def tts(text, output_path, speaker_wav, model_name="models/TTS/CosyVoice-300M", 
         logger.info(f'TTS {text} 已存在')
         return
     
-    if model is None:
-        load_model(model_name, device)
-    
-    for retry in range(3):
-        try:
-            prompt_speech_16k = load_wav(speaker_wav, 16000)
-            output = model.inference_cross_lingual(f'<|{language_map[target_language]}|>{text}', prompt_speech_16k)
-            torchaudio.save(output_path, output['tts_speech'], 22050)
+    try:
+        # 动态导入load_wav
+        from cosyvoice.utils.file_utils import load_wav
+        
+        if model is None:
+            load_model(model_name, device)
+        
+        for retry in range(3):
+            try:
+                prompt_speech_16k = load_wav(speaker_wav, 16000)
+                output = model.inference_cross_lingual(f'<|{language_map[target_language]}|>{text}', prompt_speech_16k)
+                torchaudio.save(output_path, output['tts_speech'], 22050)
 
-            logger.info(f'TTS {text}')
-            break
-        except Exception as e:
-            logger.warning(f'TTS {text} 失败')
-            logger.warning(e)
+                logger.info(f'TTS {text}')
+                break
+            except Exception as e:
+                logger.warning(f'TTS {text} 失败')
+                logger.warning(e)
+    except ImportError as e:
+        logger.error(f"CosyVoice not available: {e}")
+        logger.info("Please install CosyVoice if you want to use this TTS method")
+        return False
 
 
 if __name__ == '__main__':

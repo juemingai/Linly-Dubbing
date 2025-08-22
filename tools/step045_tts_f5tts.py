@@ -21,15 +21,8 @@ def install_f5tts():
         logger.info("F5-TTS already installed")
         return True
     except ImportError:
-        logger.info("Installing F5-TTS...")
-        try:
-            # 安装F5-TTS
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "f5-tts"])
-            logger.info("F5-TTS installed successfully")
-            return True
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to install F5-TTS: {e}")
-            return False
+        logger.info("F5-TTS not found, please install it manually with: pip install f5-tts")
+        return False
 
 
 def load_f5tts_model(model_name="F5TTS_v1_Base", device="auto"):
