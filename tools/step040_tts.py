@@ -136,16 +136,12 @@ def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-Xiaox
                 if not success:
                     logger.error(f'F5-TTS生成失败: {text}')
                     # 创建一个空的音频文件以避免后续错误
-                    import numpy as np
-                    from .utils import save_wav
                     empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
                     save_wav(empty_audio, output_path)
                     logger.info(f'已创建静音文件: {output_path}')
             else:
                 logger.error(f'F5-TTS not available. Please install with: pip install f5-tts')
                 # 创建静音文件
-                import numpy as np
-                from .utils import save_wav
                 empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
                 save_wav(empty_audio, output_path)
                 logger.info(f'已创建静音文件: {output_path}')
@@ -154,8 +150,6 @@ def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-Xiaox
             if not success:
                 logger.error(f'EdgeTTS生成失败: {text}')
                 # 创建一个空的音频文件以避免后续错误
-                import numpy as np
-                from .utils import save_wav
                 empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
                 save_wav(empty_audio, output_path)
                 logger.info(f'已创建静音文件: {output_path}')
