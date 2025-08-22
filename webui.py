@@ -11,6 +11,33 @@ import queue
 import time
 from tools.utils import SUPPORT_VOICE
 
+# 获取可用的TTS方法
+def get_available_tts_methods():
+    try:
+        from tools.step040_tts import F5TTS_AVAILABLE
+        base_methods = ['xtts', 'cosyvoice', 'EdgeTTS']
+        if F5TTS_AVAILABLE:
+            base_methods.append('f5tts')
+        return base_methods
+    except:
+        return ['xtts', 'cosyvoice', 'EdgeTTS']
+
+# 获取所有支持的语言（包含F5-TTS的语言）
+def get_all_supported_languages():
+    try:
+        from tools.step040_tts import F5TTS_AVAILABLE
+        base_langs = ['中文', 'English', '粤语', 'Japanese', 'Korean', 'Spanish', 'French']
+        if F5TTS_AVAILABLE:
+            # 添加F5-TTS额外支持的语言
+            extra_langs = ['German', 'Italian', 'Portuguese', 'Polish', 'Turkish', 'Russian', 'Dutch', 'Czech', 'Arabic', 'Hungarian', 'Hindi']
+            return base_langs + extra_langs
+        return base_langs
+    except:
+        return ['中文', 'English', '粤语', 'Japanese', 'Korean', 'Spanish', 'French']
+
+available_tts_methods = get_available_tts_methods()
+all_supported_languages = get_all_supported_languages()
+
 def do_everything_with_timeout(*args, timeout=300, **kwargs):
     """
     带超时的do_everything包装函数，避免界面卡死
@@ -72,8 +99,8 @@ full_auto_interface = gr.Interface(
         gr.Dropdown(['OpenAI', 'LLM', 'Google Translate', 'Bing Translate', 'Ernie'], label='翻译方式', value='LLM'),
         gr.Dropdown(['简体中文', '繁体中文', 'English', 'Cantonese', 'Japanese', 'Korean'], label='目标语言', value='简体中文'),
 
-        gr.Dropdown(['xtts', 'cosyvoice', 'EdgeTTS'], label='AI语音生成方法', value='xtts'),
-        gr.Dropdown(['中文', 'English', '粤语', 'Japanese', 'Korean', 'Spanish', 'French'], label='目标语言', value='中文'),
+        gr.Dropdown(available_tts_methods, label='AI语音生成方法', value='xtts'),
+        gr.Dropdown(all_supported_languages, label='目标语言', value='中文'),
         gr.Dropdown(SUPPORT_VOICE, value='zh-CN-XiaoxiaoNeural', label='EdgeTTS声音选择'),
 
         gr.Checkbox(label='添加字幕', value=True),
@@ -169,8 +196,8 @@ tts_interface = gr.Interface(
     fn=generate_all_wavs_under_folder,
     inputs=[
         gr.Textbox(label='视频文件夹', value='videos'),
-        gr.Dropdown(['xtts', 'cosyvoice', 'EdgeTTS'], label='AI语音生成方法', value='xtts'),
-        gr.Dropdown(['中文', 'English', '粤语', 'Japanese', 'Korean', 'Spanish', 'French'], label='目标语言', value='中文'),
+        gr.Dropdown(available_tts_methods, label='AI语音生成方法', value='xtts'),
+        gr.Dropdown(all_supported_languages, label='目标语言', value='中文'),
         gr.Dropdown(SUPPORT_VOICE, value='zh-CN-XiaoxiaoNeural', label='EdgeTTS声音选择'),
     ],
     outputs=[

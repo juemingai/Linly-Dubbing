@@ -8,9 +8,14 @@ import sys
 import subprocess
 import importlib.util
 from loguru import logger
-import numpy as np
-import torch
-import torchaudio
+
+# 延迟导入可能缺失的依赖
+try:
+    import numpy as np
+    import torch
+    import torchaudio
+except ImportError as e:
+    logger.warning(f"Some dependencies not available for F5-TTS: {e}")
 
 
 def install_f5tts():

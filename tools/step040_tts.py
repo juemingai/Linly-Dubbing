@@ -11,7 +11,16 @@ from .utils import save_wav, save_wav_norm
 from .step042_tts_xtts import tts as xtts_tts
 from .step043_tts_cosyvoice import tts as cosyvoice_tts
 from .step044_tts_edge_tts import tts as edge_tts
-from .step045_tts_f5tts import tts as f5tts_tts
+
+# F5-TTS - 在安装后启用
+try:
+    from .step045_tts_f5tts import tts as f5tts_tts
+    F5TTS_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"F5-TTS not available: {e}")
+    logger.info("Install F5-TTS with: pip install f5-tts")
+    f5tts_tts = None
+    F5TTS_AVAILABLE = False
 from .cn_tx import TextNorm
 from audiostretchy.stretch import stretch_audio
 normalizer = TextNorm()
@@ -71,6 +80,7 @@ def adjust_audio_length(wav_path, desired_length, sample_rate = 24000, min_speed
     wav, sample_rate = librosa.load(target_path, sr=sample_rate)
     return wav[:int(desired_length*sample_rate)], desired_length
 
+# 基础TTS支持语言
 tts_support_languages = {
     # XTTS-v2 supports 17 languages: English (en), Spanish (es), French (fr), German (de), Italian (it), Portuguese (pt), Polish (pl), Turkish (tr), Russian (ru), Dutch (nl), Czech (cs), Arabic (ar), Chinese (zh-cn), Japanese (ja), Hungarian (hu), Korean (ko) Hindi (hi).
     'xtts': ['中文', 'English', 'Japanese', 'Korean', 'French', 'Polish', 'Spanish'],
@@ -79,9 +89,11 @@ tts_support_languages = {
     'EdgeTTS': ['中文', 'English', 'Japanese', 'Korean', 'French', 'Polish', 'Spanish'],
     # zero_shot usage, <|zh|><|en|><|jp|><|yue|><|ko|> for Chinese/English/Japanese/Cantonese/Korean
     'cosyvoice': ['中文', '粤语', 'English', 'Japanese', 'Korean', 'French'],
-    # F5-TTS supports multilingual TTS with voice cloning
-    'f5tts': ['中文', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'German', 'Italian', 'Portuguese', 'Polish', 'Turkish', 'Russian', 'Dutch', 'Czech', 'Arabic', 'Hungarian', 'Hindi'], 
 }
+
+# 如果F5-TTS可用，添加支持
+if F5TTS_AVAILABLE:
+    tts_support_languages['f5tts'] = ['中文', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'German', 'Italian', 'Portuguese', 'Polish', 'Turkish', 'Russian', 'Dutch', 'Czech', 'Arabic', 'Hungarian', 'Hindi']
 
 def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-XiaoxiaoNeural'):
     assert method in ['xtts', 'bytedance', 'cosyvoice', 'EdgeTTS', 'f5tts']
@@ -119,10 +131,19 @@ def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-Xiaox
         elif method == 'cosyvoice':
             cosyvoice_tts(text, output_path, speaker_wav, target_language = target_language)
         elif method == 'f5tts':
-            success = f5tts_tts(text, output_path, speaker_wav, target_language = target_language)
-            if not success:
-                logger.error(f'F5-TTS生成失败: {text}')
-                # 创建一个空的音频文件以避免后续错误
+            if F5TTS_AVAILABLE and f5tts_tts is not None:
+                success = f5tts_tts(text, output_path, speaker_wav, target_language = target_language)
+                if not success:
+                    logger.error(f'F5-TTS生成失败: {text}')
+                    # 创建一个空的音频文件以避免后续错误
+                    import numpy as np
+                    from .utils import save_wav
+                    empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
+                    save_wav(empty_audio, output_path)
+                    logger.info(f'已创建静音文件: {output_path}')
+            else:
+                logger.error(f'F5-TTS not available. Please install with: pip install f5-tts')
+                # 创建静音文件
                 import numpy as np
                 from .utils import save_wav
                 empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
