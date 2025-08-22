@@ -30,39 +30,32 @@ def install_f5tts():
         return False
 
 
-def load_f5tts_model(model_name="F5TTS_v1_Base", device="auto"):
+def load_f5tts_model(model_name="F5-TTS", device="auto"):
     """加载F5-TTS模型"""
     try:
         # 确保F5-TTS已安装
         if not install_f5tts():
             raise ImportError("Failed to install F5-TTS")
         
-        # 导入F5-TTS相关模块
-        from f5_tts.api import F5TTS
-        from f5_tts.infer.utils_infer import load_vocoder
+        # 导入F5-TTS相关模块 - 使用命令行接口更稳定
+        import f5_tts
         
         if device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        logger.info(f"Loading F5-TTS model: {model_name} on {device}")
+        logger.info(f"F5-TTS package loaded successfully on {device}")
         
-        # 初始化F5-TTS模型
-        f5tts = F5TTS(model_type=model_name, ckpt_file=None)
-        
-        # 加载vocoder
-        vocoder = load_vocoder(vocoder_name="vocos", is_local=False, local_path="", device=device)
-        
-        logger.info("F5-TTS model loaded successfully")
-        return f5tts, vocoder, device
+        # 返回一个标志表示F5-TTS可用
+        return True, device, None
     
     except Exception as e:
         logger.error(f"Failed to load F5-TTS model: {e}")
         return None, None, None
 
 
-def tts(text, output_path, speaker_wav=None, model_name="F5TTS_v1_Base", device='auto', target_language='中文'):
+def tts(text, output_path, speaker_wav=None, model_name="F5-TTS", device='auto', target_language='中文'):
     """
-    使用F5-TTS进行语音合成
+    使用F5-TTS进行语音合成 - 使用命令行接口
     
     Args:
         text (str): 要合成的文本
@@ -76,112 +69,70 @@ def tts(text, output_path, speaker_wav=None, model_name="F5TTS_v1_Base", device=
         bool: 合成是否成功
     """
     try:
-        # 加载模型
-        f5tts, vocoder, device = load_f5tts_model(model_name, device)
-        if f5tts is None:
+        # 检查F5-TTS是否可用
+        model_available, device, _ = load_f5tts_model(model_name, device)
+        if not model_available:
             logger.error("Failed to load F5-TTS model")
             return False
         
-        # 处理参考音频
-        ref_audio = None
-        ref_text = ""
+        # 构建命令行参数
+        cmd = ["f5-tts_infer-cli"]
         
+        # 如果有参考音频，添加声音克隆参数
         if speaker_wav and os.path.exists(speaker_wav):
-            # 加载参考音频
-            ref_audio, sample_rate = torchaudio.load(speaker_wav)
-            # 确保采样率为24kHz
-            if sample_rate != 24000:
-                ref_audio = torchaudio.functional.resample(ref_audio, sample_rate, 24000)
-            
-            # 如果是立体声，转换为单声道
-            if ref_audio.shape[0] > 1:
-                ref_audio = ref_audio.mean(dim=0, keepdim=True)
-            
-            ref_audio = ref_audio.squeeze().numpy()
-            
-            # 参考文本 - 在实际应用中，这里应该是参考音频的转录文本
-            # 由于没有ASR模块，我们使用一个通用的参考文本
+            cmd.extend(["--ref_audio", speaker_wav])
+            # 添加参考文本（简单起见，使用固定文本）
             if target_language == '中文':
-                ref_text = "这是一段参考音频的转录文本。"
+                ref_text = "这是一段参考音频。"
             else:
-                ref_text = "This is a reference audio transcription text."
+                ref_text = "This is a reference audio."
+            cmd.extend(["--ref_text", ref_text])
+        
+        # 添加生成文本
+        cmd.extend(["--gen_text", text])
+        
+        # 添加输出路径
+        cmd.extend(["--output_dir", os.path.dirname(output_path)])
+        
+        # 设置输出文件名
+        filename = os.path.basename(output_path)
+        if filename.endswith('.wav'):
+            filename = filename[:-4]  # 移除.wav扩展名
+        cmd.extend(["--output_name", filename])
+        
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # 执行命令
+        logger.info(f"Running F5-TTS command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            # F5-TTS生成的文件可能在输出目录中，需要重命名
+            generated_file = os.path.join(os.path.dirname(output_path), filename + ".wav")
+            if os.path.exists(generated_file) and generated_file != output_path:
+                # 重命名到目标路径
+                import shutil
+                shutil.move(generated_file, output_path)
+            
+            if os.path.exists(output_path):
+                logger.info(f"F5-TTS synthesis successful: {output_path}")
+                return True
+            else:
+                logger.error(f"F5-TTS generated file not found at expected location")
+                return False
         else:
-            logger.warning("No reference audio provided, using zero-shot mode")
-            # 在零样本模式下，F5-TTS可能需要默认的说话人音色
+            logger.error(f"F5-TTS command failed: {result.stderr}")
+            if result.stdout:
+                logger.error(f"F5-TTS stdout: {result.stdout}")
+            return False
         
-        # 语言映射
-        language_mapping = {
-            '中文': 'zh',
-            'English': 'en', 
-            'Japanese': 'ja',
-            'Korean': 'ko',
-            'French': 'fr',
-            'Spanish': 'es',
-            'German': 'de',
-            'Italian': 'it',
-            'Portuguese': 'pt',
-            'Polish': 'pl',
-            'Turkish': 'tr',
-            'Russian': 'ru',
-            'Dutch': 'nl',
-            'Czech': 'cs',
-            'Arabic': 'ar',
-            'Hungarian': 'hu',
-            'Hindi': 'hi'
-        }
-        
-        lang_code = language_mapping.get(target_language, 'zh')
-        
-        # 进行语音合成
-        logger.info(f"Generating speech for: {text[:50]}...")
-        
-        # F5-TTS推理
-        if ref_audio is not None:
-            # 声音克隆模式
-            wav, sr, _ = f5tts.infer(
-                ref_audio=ref_audio,
-                ref_text=ref_text,
-                gen_text=text,
-                model_obj=None,
-                vocoder=vocoder,
-                cross_fade_duration=0.15,
-                speed=1.0,
-                show_info=True
-            )
-        else:
-            # 零样本模式
-            wav, sr, _ = f5tts.infer(
-                ref_audio=None,
-                ref_text="",
-                gen_text=text,
-                model_obj=None,
-                vocoder=vocoder,
-                cross_fade_duration=0.15,
-                speed=1.0,
-                show_info=True
-            )
-        
-        # 保存音频文件
-        if isinstance(wav, torch.Tensor):
-            wav = wav.cpu().numpy()
-        
-        # 确保音频是单声道
-        if wav.ndim > 1:
-            wav = wav.squeeze()
-        
-        # 归一化音频
-        wav = wav / np.max(np.abs(wav)) * 0.9
-        
-        # 保存为WAV文件
-        torchaudio.save(
-            output_path,
-            torch.tensor(wav).unsqueeze(0),
-            sample_rate=sr
-        )
-        
-        logger.info(f"F5-TTS synthesis successful: {output_path}")
-        return True
-        
+    except subprocess.TimeoutExpired:
+        logger.error("F5-TTS synthesis timed out")
+        return False
+    except FileNotFoundError:
+        logger.error("f5-tts_infer-cli command not found. Please ensure F5-TTS is properly installed.")
+        return False
     except Exception as e:
         logger.error(f"F5-TTS synthesis failed: {e}")
         import traceback
@@ -203,7 +154,10 @@ def test_f5tts():
     if success and os.path.exists(output_path):
         logger.info(f"F5-TTS test successful! Output saved to {output_path}")
         # 清理测试文件
-        os.remove(output_path)
+        try:
+            os.remove(output_path)
+        except:
+            pass
         return True
     else:
         logger.error("F5-TTS test failed")
