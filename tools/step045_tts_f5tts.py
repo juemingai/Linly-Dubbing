@@ -78,6 +78,9 @@ def tts(text, output_path, speaker_wav=None, model_name="F5-TTS", device='auto',
         # 构建命令行参数
         cmd = ["f5-tts_infer-cli"]
         
+        # 设置模型
+        cmd.extend(["--model", "F5TTS_v1_Base"])
+        
         # 如果有参考音频，添加声音克隆参数
         if speaker_wav and os.path.exists(speaker_wav):
             cmd.extend(["--ref_audio", speaker_wav])
@@ -91,14 +94,16 @@ def tts(text, output_path, speaker_wav=None, model_name="F5-TTS", device='auto',
         # 添加生成文本
         cmd.extend(["--gen_text", text])
         
-        # 添加输出路径
+        # 设置输出目录
         cmd.extend(["--output_dir", os.path.dirname(output_path)])
         
-        # 设置输出文件名
+        # 设置输出文件名（使用 --output_file 而不是 --output_name）
         filename = os.path.basename(output_path)
-        if filename.endswith('.wav'):
-            filename = filename[:-4]  # 移除.wav扩展名
-        cmd.extend(["--output_name", filename])
+        cmd.extend(["--output_file", filename])
+        
+        # 添加设备参数
+        if device and device != 'auto':
+            cmd.extend(["--device", device])
         
         # 确保输出目录存在
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -108,18 +113,28 @@ def tts(text, output_path, speaker_wav=None, model_name="F5-TTS", device='auto',
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
         if result.returncode == 0:
-            # F5-TTS生成的文件可能在输出目录中，需要重命名
-            generated_file = os.path.join(os.path.dirname(output_path), filename + ".wav")
-            if os.path.exists(generated_file) and generated_file != output_path:
-                # 重命名到目标路径
-                import shutil
-                shutil.move(generated_file, output_path)
-            
+            # 检查生成的文件是否存在
             if os.path.exists(output_path):
                 logger.info(f"F5-TTS synthesis successful: {output_path}")
                 return True
             else:
-                logger.error(f"F5-TTS generated file not found at expected location")
+                # 有时F5-TTS会生成不同名称的文件，尝试寻找
+                output_dir = os.path.dirname(output_path)
+                for file in os.listdir(output_dir):
+                    if file.endswith('.wav') and file.startswith(filename.replace('.wav', '')):
+                        generated_file = os.path.join(output_dir, file)
+                        import shutil
+                        shutil.move(generated_file, output_path)
+                        logger.info(f"F5-TTS synthesis successful (renamed): {output_path}")
+                        return True
+                
+                logger.error(f"F5-TTS generated file not found at expected location: {output_path}")
+                # 列出输出目录的文件以便调试
+                try:
+                    files = os.listdir(output_dir)
+                    logger.error(f"Files in output directory: {files}")
+                except:
+                    pass
                 return False
         else:
             logger.error(f"F5-TTS command failed: {result.stderr}")
