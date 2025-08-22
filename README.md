@@ -320,6 +320,20 @@ Main features and characteristics:
 2. **Multi-style speech synthesis**: Controls the emotion and tone of speech through commands.
 3. **Streaming inference support**: Future plans include real-time streaming inference support.
 
+#### F5-TTS
+
+**F5-TTS** is a state-of-the-art text-to-speech model based on Flow Matching, developed by the SWivid team. F5-TTS stands for "A Fairytaler that Fakes Fluent and Faithful Speech" and represents a breakthrough in neural speech synthesis. The model utilizes advanced Flow Matching techniques to generate highly natural and expressive speech across multiple languages with exceptional quality and controllability.
+
+Key features of F5-TTS include:
+
+1. **Flow Matching Architecture**: Uses cutting-edge flow-based generative modeling for superior audio quality
+2. **Multilingual Support**: Supports 17+ languages including Chinese, English, Japanese, Korean, French, Spanish, German, Italian, Portuguese, Polish, Turkish, Russian, Dutch, Czech, Arabic, Hungarian, and Hindi
+3. **Voice Cloning**: Enables high-quality voice cloning with just 3-10 seconds of reference audio
+4. **Zero-shot Synthesis**: Can generate speech without reference audio using pre-trained speaker embeddings
+5. **Fast Inference**: Optimized for real-time applications with efficient inference speeds
+
+For more information and technical details, visit the [F5-TTS project](https://github.com/SWivid/F5-TTS) and read the [research paper](https://arxiv.org/abs/2410.06885).
+
 #### GPT-SoVITS
 
 Thanks to the contributions of the open-source community, AI speech synthesis also benefits from the open-source voice cloning model `GPT-SoVITS`. **GPT** is a transformer-based natural language processing model with strong text generation capabilities, while **SoVITS** is a deep learning-based voice conversion technology capable of converting one person's voice into another’s. By combining these two technologies, **GPT-SoVITS** can generate highly realistic speech that matches the given text content.

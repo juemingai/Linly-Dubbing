@@ -11,6 +11,7 @@ from .utils import save_wav, save_wav_norm
 from .step042_tts_xtts import tts as xtts_tts
 from .step043_tts_cosyvoice import tts as cosyvoice_tts
 from .step044_tts_edge_tts import tts as edge_tts
+from .step045_tts_f5tts import tts as f5tts_tts
 from .cn_tx import TextNorm
 from audiostretchy.stretch import stretch_audio
 normalizer = TextNorm()
@@ -77,11 +78,13 @@ tts_support_languages = {
     'GPTSoVits': [],
     'EdgeTTS': ['中文', 'English', 'Japanese', 'Korean', 'French', 'Polish', 'Spanish'],
     # zero_shot usage, <|zh|><|en|><|jp|><|yue|><|ko|> for Chinese/English/Japanese/Cantonese/Korean
-    'cosyvoice': ['中文', '粤语', 'English', 'Japanese', 'Korean', 'French'], 
+    'cosyvoice': ['中文', '粤语', 'English', 'Japanese', 'Korean', 'French'],
+    # F5-TTS supports multilingual TTS with voice cloning
+    'f5tts': ['中文', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'German', 'Italian', 'Portuguese', 'Polish', 'Turkish', 'Russian', 'Dutch', 'Czech', 'Arabic', 'Hungarian', 'Hindi'], 
 }
 
 def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-XiaoxiaoNeural'):
-    assert method in ['xtts', 'bytedance', 'cosyvoice', 'EdgeTTS']
+    assert method in ['xtts', 'bytedance', 'cosyvoice', 'EdgeTTS', 'f5tts']
     transcript_path = os.path.join(folder, 'translation.json')
     output_folder = os.path.join(folder, 'wavs')
     if not os.path.exists(output_folder):
@@ -109,11 +112,22 @@ def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-Xiaox
             # bytedance_tts(text, output_path, speaker_wav, voice_type='BV701_streaming')
         
         if method == 'bytedance':
-            bytedance_tts(text, output_path, speaker_wav, target_language = target_language)
+            # bytedance_tts(text, output_path, speaker_wav, target_language = target_language)
+            logger.warning("Bytedance TTS not implemented yet")
         elif method == 'xtts':
             xtts_tts(text, output_path, speaker_wav, target_language = target_language)
         elif method == 'cosyvoice':
             cosyvoice_tts(text, output_path, speaker_wav, target_language = target_language)
+        elif method == 'f5tts':
+            success = f5tts_tts(text, output_path, speaker_wav, target_language = target_language)
+            if not success:
+                logger.error(f'F5-TTS生成失败: {text}')
+                # 创建一个空的音频文件以避免后续错误
+                import numpy as np
+                from .utils import save_wav
+                empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
+                save_wav(empty_audio, output_path)
+                logger.info(f'已创建静音文件: {output_path}')
         elif method == 'EdgeTTS':
             success = edge_tts(text, output_path, target_language = target_language, voice = voice)
             if not success:

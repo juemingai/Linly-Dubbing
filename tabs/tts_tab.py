@@ -24,13 +24,17 @@ class TTSTab(QWidget):
 
         # AI语音生成方法
         self.tts_method = QComboBox()
-        self.tts_method.addItems(['xtts', 'cosyvoice', 'EdgeTTS'])
+        self.tts_method.addItems(['xtts', 'cosyvoice', 'EdgeTTS', 'f5tts'])
         self.layout.addWidget(QLabel("AI语音生成方法"))
         self.layout.addWidget(self.tts_method)
 
         # 目标语言
         self.target_language = QComboBox()
-        self.target_language.addItems(['中文', 'English', '粤语', 'Japanese', 'Korean', 'Spanish', 'French'])
+        self.target_language.addItems([
+            '中文', 'English', '粤语', 'Japanese', 'Korean', 'Spanish', 'French',
+            'German', 'Italian', 'Portuguese', 'Polish', 'Turkish', 'Russian',
+            'Dutch', 'Czech', 'Arabic', 'Hungarian', 'Hindi'
+        ])
         self.target_language.setCurrentText('中文')
         self.layout.addWidget(QLabel("目标语言"))
         self.layout.addWidget(self.target_language)
