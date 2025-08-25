@@ -14,10 +14,12 @@ from tools.utils import SUPPORT_VOICE
 # 获取可用的TTS方法
 def get_available_tts_methods():
     try:
-        from tools.step040_tts import F5TTS_AVAILABLE
+        from tools.step040_tts import F5TTS_AVAILABLE, MINIMAX_AVAILABLE
         base_methods = ['xtts', 'cosyvoice', 'EdgeTTS']
         if F5TTS_AVAILABLE:
             base_methods.append('f5tts')
+        if MINIMAX_AVAILABLE:
+            base_methods.append('minimax')
         return base_methods
     except:
         return ['xtts', 'cosyvoice', 'EdgeTTS']
@@ -75,9 +77,27 @@ def do_everything_with_timeout(*args, timeout=300, **kwargs):
     else:
         return "处理完成但未返回结果", None
 
+# 包装一键自动化函数以支持 Minimax voice_id
+def do_everything_with_minimax(*args, **kwargs):
+    """一键自动化包装函数，支持Minimax音色ID"""
+    # 从参数中提取minimax_voice_id（倒数第二个参数）
+    args_list = list(args)
+    minimax_voice_id = args_list[-1] if len(args_list) > 0 else ''
+    
+    # 移除minimax_voice_id参数，保持原有参数数量
+    args_without_voice_id = args_list[:-1]
+    
+    # 如果选择了minimax方法且提供了voice_id，添加到kwargs
+    if len(args_without_voice_id) >= 15:  # 确保有足够的参数
+        tts_method = args_without_voice_id[14]  # TTS方法参数位置
+        if tts_method == 'minimax' and minimax_voice_id.strip():
+            kwargs['voice_id'] = minimax_voice_id.strip()
+    
+    return do_everything_with_timeout(*args_without_voice_id, **kwargs)
+
 # 一键自动化界面
 full_auto_interface = gr.Interface(
-    fn=do_everything_with_timeout,
+    fn=do_everything_with_minimax,
     inputs=[
         gr.Textbox(label='视频输出文件夹', value='videos'),
         gr.Textbox(label='视频URL', placeholder='请输入Youtube或Bilibili的视频、播放列表或频道的URL', 
@@ -113,6 +133,14 @@ full_auto_interface = gr.Interface(
 
         gr.Slider(minimum=1, maximum=100, step=1, label='Max Workers', value=1),
         gr.Slider(minimum=1, maximum=10, step=1, label='Max Retries', value=3),
+        
+        # 新增 Minimax 音色ID 输入框
+        gr.Textbox(
+            label='Minimax音色ID (仅在选择minimax时使用)', 
+            value='cobra_design_20250717_162427_683071',
+            placeholder='如: cobra_design_20250717_162427_683071',
+            info='仅当AI语音生成方法选择minimax时有效。默认: 都市白领音色'
+        ),
     ],
     outputs=[gr.Text(label='合成状态'), gr.Video(label='合成视频样例结果')],
     allow_flagging='never',
@@ -191,14 +219,35 @@ translation_interface = gr.Interface(
     allow_flagging='never',
 )
 
+# 包装函数以支持 Minimax voice_id 参数
+def tts_with_voice_id(folder, method, target_language, edge_voice, minimax_voice_id):
+    """TTS接口包装函数，支持Minimax音色ID参数"""
+    kwargs = {}
+    if method == 'minimax' and minimax_voice_id.strip():
+        kwargs['voice_id'] = minimax_voice_id.strip()
+    
+    return generate_all_wavs_under_folder(
+        root_folder=folder,
+        method=method,
+        target_language=target_language,
+        voice=edge_voice,
+        **kwargs
+    )
+
 # AI语音合成接口
 tts_interface = gr.Interface(
-    fn=generate_all_wavs_under_folder,
+    fn=tts_with_voice_id,
     inputs=[
         gr.Textbox(label='视频文件夹', value='videos'),
         gr.Dropdown(available_tts_methods, label='AI语音生成方法', value='xtts'),
         gr.Dropdown(all_supported_languages, label='目标语言', value='中文'),
         gr.Dropdown(SUPPORT_VOICE, value='zh-CN-XiaoxiaoNeural', label='EdgeTTS声音选择'),
+        gr.Textbox(
+            label='Minimax音色ID (仅在选择minimax时使用)', 
+            value='cobra_design_20250717_162427_683071',
+            placeholder='如: cobra_design_20250717_162427_683071 或您的自定义音色ID',
+            info='Minimax专用音色ID。默认: cobra_design_20250717_162427_683071 (都市白领)，或使用您通过Minimax语音克隆创建的音色ID'
+        ),
     ],
     outputs=[
         gr.Text(label='合成状态'), 

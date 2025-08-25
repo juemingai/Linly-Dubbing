@@ -12,6 +12,16 @@ from .step042_tts_xtts import tts as xtts_tts
 from .step043_tts_cosyvoice import tts as cosyvoice_tts
 from .step044_tts_edge_tts import tts as edge_tts
 
+# Minimax TTS - 商业API
+try:
+    from .step046_tts_minimax import tts as minimax_tts
+    MINIMAX_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Minimax TTS not available: {e}")
+    logger.info("Install requests library and set MINIMAX_API_KEY to use Minimax TTS")
+    minimax_tts = None
+    MINIMAX_AVAILABLE = False
+
 # F5-TTS - 在安装后启用
 try:
     from .step045_tts_f5tts import tts as f5tts_tts
@@ -89,14 +99,18 @@ tts_support_languages = {
     'EdgeTTS': ['中文', 'English', 'Japanese', 'Korean', 'French', 'Polish', 'Spanish'],
     # zero_shot usage, <|zh|><|en|><|jp|><|yue|><|ko|> for Chinese/English/Japanese/Cantonese/Korean
     'cosyvoice': ['中文', '粤语', 'English', 'Japanese', 'Korean', 'French'],
+    # Minimax commercial TTS API
+    'minimax': ['中文', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'German', 'Italian', 'Portuguese'],
 }
 
 # 如果F5-TTS可用，添加支持
 if F5TTS_AVAILABLE:
     tts_support_languages['f5tts'] = ['中文', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'German', 'Italian', 'Portuguese', 'Polish', 'Turkish', 'Russian', 'Dutch', 'Czech', 'Arabic', 'Hungarian', 'Hindi']
 
-def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-XiaoxiaoNeural'):
-    assert method in ['xtts', 'bytedance', 'cosyvoice', 'EdgeTTS', 'f5tts']
+# 如果Minimax可用，已在上面添加支持
+
+def generate_wavs(method, folder, target_language='中文', voice='zh-CN-XiaoxiaoNeural', **kwargs):
+    assert method in ['xtts', 'bytedance', 'cosyvoice', 'EdgeTTS', 'f5tts', 'minimax']
     transcript_path = os.path.join(folder, 'translation.json')
     output_folder = os.path.join(folder, 'wavs')
     if not os.path.exists(output_folder):
@@ -153,6 +167,23 @@ def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-Xiaox
                 empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
                 save_wav(empty_audio, output_path)
                 logger.info(f'已创建静音文件: {output_path}')
+        elif method == 'minimax':
+            if MINIMAX_AVAILABLE and minimax_tts is not None:
+                # 从kwargs中获取voice_id参数
+                voice_id = kwargs.get('voice_id', None)
+                success = minimax_tts(text, output_path, speaker_wav, target_language=target_language, voice_id=voice_id, **kwargs)
+                if not success:
+                    logger.error(f'Minimax TTS生成失败: {text}')
+                    # 创建一个空的音频文件以避免后续错误
+                    empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
+                    save_wav(empty_audio, output_path)
+                    logger.info(f'已创建静音文件: {output_path}')
+            else:
+                logger.error(f'Minimax TTS not available. Please set MINIMAX_API_KEY in .env file')
+                # 创建静音文件
+                empty_audio = np.zeros(int(0.5 * 24000))  # 0.5秒的静音
+                save_wav(empty_audio, output_path)
+                logger.info(f'已创建静音文件: {output_path}')
         start = line['start']
         end = line['end']
         length = end-start
@@ -194,11 +225,11 @@ def generate_wavs(method, folder, target_language='中文', voice = 'zh-CN-Xiaox
     logger.info(f'Generated {os.path.join(folder, "audio_combined.wav")}')
     return os.path.join(folder, 'audio_combined.wav'), os.path.join(folder, 'audio.wav')
 
-def generate_all_wavs_under_folder(root_folder, method, target_language='中文', voice = 'zh-CN-XiaoxiaoNeural'):
+def generate_all_wavs_under_folder(root_folder, method, target_language='中文', voice='zh-CN-XiaoxiaoNeural', **kwargs):
     wav_combined, wav_ori = None, None
     for root, dirs, files in os.walk(root_folder):
         if 'translation.json' in files and 'audio_combined.wav' not in files:
-            wav_combined, wav_ori = generate_wavs(method, root, target_language, voice)
+            wav_combined, wav_ori = generate_wavs(method, root, target_language, voice, **kwargs)
         elif 'audio_combined.wav' in files:
             wav_combined, wav_ori = os.path.join(root, 'audio_combined.wav'), os.path.join(root, 'audio.wav')
             logger.info(f'Wavs already generated in {root}')
