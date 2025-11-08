@@ -251,6 +251,26 @@ After starting, you will see an interface like the one below. You can open [http
 
 ![Linly-Dubbing](docs/webui.png)
 
+#### Handling YouTube login or bot checks
+
+YouTube playlists often require an authenticated browser session. If `yt-dlp` reports `Sign in to confirm you're not a bot`, export cookies from a browser profile that can play the video:
+
+```bash
+yt-dlp --cookies-from-browser chrome --cookies cookies.txt "https://www.youtube.com/watch?v=xxxx"
+```
+
+Place the generated `cookies.txt` at the project root (or set `YTDLP_COOKIES_FILE=/path/to/cookies.txt`). You can also let the app pull cookies directly from a browser by setting the following environment variables (all optional) before launching the UI:
+
+```bash
+export YTDLP_COOKIES_BROWSER=chrome        # or firefox/edge
+export YTDLP_COOKIES_PROFILE=Default       # browser profile name if needed
+export YTDLP_COOKIES_KEYRING=None          # macOS keyring label when required
+export YTDLP_COOKIES_CONTAINER=None        # Firefox container, optional
+export YTDLP_USER_AGENT="Mozilla/5.0 ..."   # override default UA when sites block automation
+```
+
+Restart the pipeline after updating cookies. The downloader now retries multiple formats and provides clearer errors when metadata is missing, so any remaining failures usually indicate expired cookies or region locks.
+
 
 
 ## Detailed Features and Technical Details
