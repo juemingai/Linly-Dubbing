@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import mimetypes
 import os
 import re
 import shutil
+import tempfile
 from datetime import datetime
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+import requests
 from loguru import logger
 import yt_dlp
 from yt_dlp.utils import DownloadError
@@ -75,35 +78,6 @@ def _build_format_candidates(resolution: str):
     ]
 
 
-def _locate_download_file(folder_path: str):
-    desired = os.path.join(folder_path, 'download.mp4')
-    if os.path.exists(desired):
-        return desired
-
-    candidates = []
-    for name in os.listdir(folder_path):
-        if not name.startswith('download'):
-            continue
-        if name.endswith(('.info.json', '.json', '.jpg', '.png', '.webp')):
-            continue
-        if name.endswith('.part'):
-            continue
-        path = os.path.join(folder_path, name)
-        if os.path.isfile(path):
-            candidates.append(path)
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=os.path.getmtime)
-    latest = candidates[-1]
-    if latest.endswith('.mp4'):
-        os.replace(latest, desired)
-    else:
-        shutil.move(latest, desired)
-    return desired
-
-
 def _common_ydl_opts(url: str, noplaylist: bool = True):
     opts = {
         'quiet': True,
@@ -155,6 +129,78 @@ def _placeholder_info(url: str):
     }
 
 
+def _guess_extension(content_type: str | None, url: str) -> str:
+    if content_type:
+        mime = content_type.split(';')[0].strip()
+        ext = mimetypes.guess_extension(mime)
+        if ext:
+            return ext
+    suffix = os.path.splitext(url.split('?')[0])[1]
+    return suffix or '.mp4'
+
+
+def _direct_http_download(url: str, headers: dict):
+    logger.info('使用直接下载尝试获取媒体', url=url)
+    response = requests.get(url, stream=True, timeout=60, headers=headers)
+    response.raise_for_status()
+    temp_dir = tempfile.mkdtemp(prefix='yt_tmp_')
+    ext = _guess_extension(response.headers.get('content-type'), url)
+    file_path = os.path.join(temp_dir, f'download_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}{ext}')
+    with open(file_path, 'wb') as fp:
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                fp.write(chunk)
+    return file_path, temp_dir
+
+
+def _pick_temp_file(temp_dir: str):
+    candidates = []
+    for name in os.listdir(temp_dir):
+        if name.endswith(('.info.json', '.json', '.jpg', '.png', '.webp', '.part')):
+            continue
+        path = os.path.join(temp_dir, name)
+        if os.path.isfile(path):
+            candidates.append(path)
+    if not candidates:
+        return None
+    candidates.sort(key=os.path.getmtime)
+    return candidates[-1]
+
+
+def _download_with_temp_dir(video_url: str, numeric_resolution: str):
+    temp_dir = tempfile.mkdtemp(prefix='yt_tmp_')
+    headers = _build_http_headers(video_url)
+    format_candidates = _build_format_candidates(numeric_resolution)
+    last_error = None
+    try:
+        for selector in format_candidates:
+            opts = _common_ydl_opts(video_url, noplaylist=True)
+            opts.update({
+                'format': selector,
+                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                'merge_output_format': 'mp4',
+                'add_metadata': True,
+                'writethumbnail': False,
+                'http_headers': headers
+            })
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.extract_info(video_url, download=True)
+                downloaded = _pick_temp_file(temp_dir)
+                if not downloaded:
+                    raise FileNotFoundError('未找到下载的媒体文件')
+                return downloaded, temp_dir
+            except Exception as exc:
+                last_error = exc
+                logger.warning('yt-dlp 下载失败，尝试下一种格式', selector=selector, error=str(exc))
+                continue
+
+        logger.info('所有格式下载失败，尝试直接下载', last_error=str(last_error) if last_error else None)
+        return _direct_http_download(video_url, headers)
+    except Exception as exc:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise exc
+
 def sanitize_title(title):
     if title is None:
         title = ''
@@ -188,6 +234,7 @@ def download_single_video(info, folder_path, resolution='1080p'):
     video_url = info.get('webpage_url') or info.get('url')
     if not video_url:
         raise ValueError('视频信息缺少 webpage_url，无法下载。')
+    video_url = _normalize_video_url(video_url)
 
     output_folder = os.path.join(folder_path, uploader, f'{upload_date} {title}')
     os.makedirs(output_folder, exist_ok=True)
@@ -197,40 +244,25 @@ def download_single_video(info, folder_path, resolution='1080p'):
         return output_folder
 
     numeric_resolution = re.sub(r'[^0-9]', '', str(resolution)) or '1080'
-    format_candidates = _build_format_candidates(numeric_resolution)
-
-    base_opts = _common_ydl_opts(video_url, noplaylist=True)
-    base_opts.update({
-        'writeinfojson': True,
-        'writethumbnail': True,
-        'outtmpl': os.path.join(output_folder, 'download.%(ext)s')
-    })
-
-    last_error = None
-    for selector in format_candidates:
-        ydl_opts = dict(base_opts)
-        ydl_opts['format'] = selector
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([video_url])
-            downloaded = _locate_download_file(output_folder)
-            if not downloaded:
-                raise FileNotFoundError('未找到下载后的文件，请检查 yt-dlp 输出。')
-            logger.info(f'Video downloaded in {output_folder} using format {selector}')
+    try:
+        temp_file, temp_dir = _download_with_temp_dir(video_url, numeric_resolution)
+        final_path = os.path.join(output_folder, 'download.mp4')
+        suffix = os.path.splitext(temp_file)[1] or '.mp4'
+        if suffix != '.mp4':
+            final_path = os.path.join(output_folder, f'download{suffix}')
+        shutil.move(temp_file, final_path)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        if final_path.endswith('.mp4'):
             return output_folder
-        except Exception as exc:
-            last_error = exc
-            logger.warning(
-                'yt-dlp 下载失败，尝试下一种格式',
-                selector=selector,
-                error=str(exc)
-            )
-
-    error_msg = str(last_error) if last_error else '未知原因'
-    raise RuntimeError(
-        '无法下载视频，请确认链接可访问并已配置 Cookies。'
-        f' 最后错误: {error_msg}'
-    )
+        # rename non-mp4 into mp4 for downstream steps
+        target_mp4 = os.path.join(output_folder, 'download.mp4')
+        os.replace(final_path, target_mp4)
+        return output_folder
+    except Exception as exc:
+        raise RuntimeError(
+            '无法下载视频，请确认链接可访问并已配置 Cookies。'
+            f' 最后错误: {exc}'
+        ) from exc
 
 def download_videos(info_list, folder_path, resolution='1080p'):
     output_folder = None
