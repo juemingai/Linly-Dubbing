@@ -360,12 +360,16 @@ def do_everything(root_folder, url, num_videos=5, resolution='1080p',
                     progress_callback(10, "获取视频信息中...")
 
                 for video_info in get_info_list_from_url(urls, num_videos):
-                    videos_info.append(video_info)
+                    if video_info is not None:  # 过滤None值
+                        videos_info.append(video_info)
 
                 if not videos_info:
-                    return "获取视频信息失败，请检查URL是否正确", None
+                    return "获取视频信息失败，请检查URL是否正确或配置Cookie", None
 
                 for info in videos_info:
+                    if info is None:  # 额外检查
+                        logger.warning('跳过None视频信息')
+                        continue
                     try:
                         success, output_video, error_msg = process_video(
                             info, root_folder, resolution,

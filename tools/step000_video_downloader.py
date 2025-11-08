@@ -3,6 +3,7 @@ import re
 from loguru import logger
 import yt_dlp
 import json
+from urllib.parse import urlparse, parse_qs
 
 def sanitize_title(title):
     # Only keep numbers, letters, Chinese characters, and spaces
@@ -54,34 +55,77 @@ def download_single_video(info, folder_path, resolution='1080p'):
         return output_folder
     
     resolution = resolution.replace('p', '')
+    numeric_resolution = re.sub(r'[^0-9]', '', str(resolution)) or '1080'
     
     # 检查是否有webpage_url
     if 'webpage_url' not in info or not info.get('webpage_url'):
         logger.error('视频信息缺少webpage_url，无法下载')
         return None
     
-    ydl_opts = {
-        # 'res': '1080',
-        'format': f'bestvideo[ext=mp4][height<={resolution}]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'writeinfojson': True,
-        'writethumbnail': True,
-        'outtmpl': os.path.join(folder_path, sanitized_uploader, f'{upload_date} {sanitized_title}', 'download'),
-        'ignoreerrors': True,
-        'cookiefile': 'cookies.txt' if os.path.exists("cookies.txt") else None,  # 得到cookies yt-dlp --cookies-from-browser chrome --cookies cookies.txt
-        # 'cookiesfrombrowser': ('chrome', ), # 从chrome浏览器中获取cookie 
-        # 'cookiesfrombrowser': ('firefox', 'default', None, 'Meta') # 从firefox浏览器中获取cookie
-    }
+    video_url = info['webpage_url']
+    # 规范化URL，确保只下载单个视频
+    video_url = _normalize_youtube_url(video_url)
+    
+    # 参考实现：使用多个格式候选，逐个尝试
+    format_candidates = [
+        f'bestvideo[height<={numeric_resolution}]+bestaudio/best[height<={numeric_resolution}]',
+        'bestvideo+bestaudio/best',
+        'best'
+    ]
+    
+    last_error = None
+    for selector in format_candidates:
+        ydl_opts = {
+            'format': selector,
+            'outtmpl': os.path.join(folder_path, sanitized_uploader, f'{upload_date} {sanitized_title}', 'download'),
+            'merge_output_format': 'mp4',
+            'writeinfojson': True,
+            'writethumbnail': True,
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': True,
+            'noplaylist': True,  # 强制只下载单个视频
+            'retries': 5,
+            'fragment_retries': 10,
+            'continuedl': True,
+            'cookiefile': 'cookies.txt' if os.path.exists("cookies.txt") else None,
+            # 'cookiesfrombrowser': ('chrome', ), # 从chrome浏览器中获取cookie 
+            # 'cookiesfrombrowser': ('firefox', 'default', None, 'Meta') # 从firefox浏览器中获取cookie
+        }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([info['webpage_url']])
-        logger.info(f'Video downloaded in {output_folder}')
-        return output_folder
-    except Exception as e:
-        logger.error(f'下载视频失败: {info.get("title", "Unknown")}, 错误: {e}')
-        if 'Sign in' in str(e) or 'bot' in str(e) or 'cookies' in str(e).lower():
-            logger.error('YouTube要求Cookie验证，请配置cookies.txt文件或使用浏览器Cookie')
-        return None
+        try:
+            logger.debug(f'尝试使用格式下载: {selector}')
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
+            
+            # 检查文件是否下载成功
+            download_path = os.path.join(output_folder, 'download.mp4')
+            if os.path.exists(download_path):
+                logger.info(f'Video downloaded in {output_folder}')
+                return output_folder
+            else:
+                # 尝试查找其他格式的文件
+                for ext in ['.mp4', '.webm', '.mkv']:
+                    alt_path = os.path.join(output_folder, f'download{ext}')
+                    if os.path.exists(alt_path):
+                        # 重命名为mp4
+                        os.rename(alt_path, download_path)
+                        logger.info(f'Video downloaded in {output_folder}')
+                        return output_folder
+                raise FileNotFoundError('下载的文件未找到')
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            if 'sign in' in error_str or 'bot' in error_str or 'cookies' in error_str:
+                logger.error(f'下载视频失败: {info.get("title", "Unknown")}, YouTube要求Cookie验证')
+                logger.error('请配置cookies.txt文件或使用浏览器Cookie')
+                return None
+            logger.warning(f'格式 {selector} 下载失败，尝试下一种格式: {e}')
+            continue
+    
+    # 所有格式都失败
+    logger.error(f'所有格式下载都失败: {info.get("title", "Unknown")}, 最后错误: {last_error}')
+    return None
 
 def download_videos(info_list, folder_path, resolution='1080p'):
     output_folder = None
@@ -94,43 +138,68 @@ def download_videos(info_list, folder_path, resolution='1080p'):
             logger.warning(f'下载视频失败: {info.get("title", "Unknown") if info else "Unknown"}')
     return output_folder
 
+def _normalize_youtube_url(url: str) -> str:
+    """从YouTube URL中提取单个视频ID，忽略播放列表参数"""
+    parsed = urlparse(url)
+    if 'youtube.com' in parsed.netloc or 'youtu.be' in parsed.netloc:
+        query = parse_qs(parsed.query)
+        if 'v' in query:
+            # 提取视频ID，忽略list和index参数
+            video_id = query['v'][0]
+            return f'https://www.youtube.com/watch?v={video_id}'
+        elif 'youtu.be' in parsed.netloc:
+            # 短链接格式
+            video_id = parsed.path.lstrip('/')
+            return f'https://www.youtube.com/watch?v={video_id}'
+    return url
+
+
 def get_info_list_from_url(url, num_videos):
     if isinstance(url, str):
         url = [url]
 
+    # 规范化URL，提取单个视频ID
+    normalized_urls = []
+    for u in url:
+        normalized = _normalize_youtube_url(u)
+        normalized_urls.append(normalized)
+        if normalized != u:
+            logger.info(f'规范化URL: {u} -> {normalized}')
+
     # Download JSON information first
     ydl_opts = {
-        # 'format': 'b',
-        'None': "b",
         'dumpjson': True,
-        'playlistend': num_videos,
         'ignoreerrors': True,
-        'cookiefile': 'cookies.txt' if os.path.exists("cookies.txt") else None,  # 添加Cookie支持
+        'noplaylist': True,  # 强制只下载单个视频，忽略播放列表
+        'quiet': True,
+        'no_warnings': True,
+        'cookiefile': 'cookies.txt' if os.path.exists("cookies.txt") else None,
     }
 
     # video_info_list = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        for u in url:
+        for u in normalized_urls:
             try:
                 result = ydl.extract_info(u, download=False)
                 if result is None:
                     logger.warning(f'无法获取视频信息: {u}，可能需要Cookie验证')
                     continue
                 
-                if 'entries' in result and result['entries']:
-                    # Playlist
-                    for video_info in result['entries']:
-                        if video_info is not None:  # 过滤None值
-                            yield video_info
-                        else:
-                            logger.warning('播放列表中的某个视频信息为None，已跳过')
-                elif result:
-                    # Single video
-                    yield result
+                # 由于使用了noplaylist=True，result应该是单个视频，不会是播放列表
+                if result and isinstance(result, dict):
+                    # 确保有必需的字段
+                    if 'title' in result and 'webpage_url' in result:
+                        yield result
+                    else:
+                        logger.warning(f'视频信息缺少必需字段: {u}')
                 else:
-                    logger.warning(f'获取的视频信息为空: {u}')
+                    logger.warning(f'获取的视频信息为空或格式错误: {u}')
             except Exception as e:
-                logger.error(f'获取视频信息失败: {u}, 错误: {e}')
+                error_str = str(e).lower()
+                if 'sign in' in error_str or 'bot' in error_str or 'cookies' in error_str:
+                    logger.error(f'获取视频信息失败: {u}, YouTube要求Cookie验证')
+                else:
+                    logger.error(f'获取视频信息失败: {u}, 错误: {e}')
                 continue
 
     # return video_info_list
