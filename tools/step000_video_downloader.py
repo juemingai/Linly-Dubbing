@@ -4,7 +4,7 @@ import os
 import re
 import shutil
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from loguru import logger
 import yt_dlp
@@ -128,6 +128,33 @@ def _extract_info(single_url: str, noplaylist: bool, playlistend: int | None = N
         return ydl.extract_info(single_url, download=False)
 
 
+def _normalize_video_url(url: str) -> str:
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if parsed.path in {'/watch', '/watch/'} and 'v' in query:
+        normalized = parsed._replace(query=urlencode({'v': query['v']}))
+        return urlunparse(normalized)
+    if 'list' in query:
+        query.pop('list', None)
+        query.pop('index', None)
+        normalized = parsed._replace(query=urlencode(query))
+        return urlunparse(normalized)
+    return url
+
+
+def _placeholder_info(url: str):
+    cleaned_url = _normalize_video_url(url)
+    parsed = urlparse(cleaned_url)
+    query = dict(parse_qsl(parsed.query))
+    fallback_title = query.get('v') or parsed.path.strip('/').split('/')[-1] or 'download'
+    return {
+        'webpage_url': cleaned_url,
+        'title': fallback_title,
+        'uploader': 'UnknownUploader',
+        'upload_date': datetime.utcnow().strftime('%Y%m%d')
+    }
+
+
 def sanitize_title(title):
     if title is None:
         title = ''
@@ -218,6 +245,7 @@ def get_info_list_from_url(url, num_videos):
     urls = [url] if isinstance(url, str) else url
 
     for single_url in urls:
+        yielded = False
         result = None
         try:
             result = _extract_info(single_url, noplaylist=False, playlistend=num_videos)
@@ -235,20 +263,23 @@ def get_info_list_from_url(url, num_videos):
                     url=single_url,
                     error=str(single_exc)
                 )
-                continue
+                result = None
 
-        if not result:
-            logger.warning('未从链接获取到任何视频信息', url=single_url)
-            continue
+        if result:
+            if 'entries' in result and result['entries'] is not None:
+                for video_info in result['entries']:
+                    if video_info is None:
+                        logger.warning('播放列表中的某些视频需要登录才能访问', url=single_url)
+                        continue
+                    yielded = True
+                    yield video_info
+            else:
+                yielded = True
+                yield result
 
-        if 'entries' in result and result['entries'] is not None:
-            for video_info in result['entries']:
-                if video_info is None:
-                    logger.warning('播放列表中的某些视频需要登录才能访问', url=single_url)
-                    continue
-                yield video_info
-        else:
-            yield result
+        if not yielded:
+            logger.warning('无法获取播放列表条目，改用单个视频链接继续下载', url=single_url)
+            yield _placeholder_info(single_url)
 
     # return video_info_list
 
