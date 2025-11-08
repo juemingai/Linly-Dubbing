@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from loguru import logger
 import yt_dlp
+from yt_dlp.utils import DownloadError
 import json
 
 DEFAULT_USER_AGENT = os.getenv(
@@ -118,6 +119,15 @@ def _common_ydl_opts(url: str, noplaylist: bool = True):
     return _apply_cookie_options(opts)
 
 
+def _extract_info(single_url: str, noplaylist: bool, playlistend: int | None = None):
+    ydl_opts = _common_ydl_opts(single_url, noplaylist=noplaylist)
+    ydl_opts['ignoreerrors'] = True
+    if not noplaylist and playlistend:
+        ydl_opts['playlistend'] = playlistend
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        return ydl.extract_info(single_url, download=False)
+
+
 def sanitize_title(title):
     if title is None:
         title = ''
@@ -208,13 +218,24 @@ def get_info_list_from_url(url, num_videos):
     urls = [url] if isinstance(url, str) else url
 
     for single_url in urls:
-        ydl_opts = _common_ydl_opts(single_url, noplaylist=False)
-        ydl_opts['ignoreerrors'] = True
-        if num_videos:
-            ydl_opts['playlistend'] = num_videos
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            result = ydl.extract_info(single_url, download=False)
+        result = None
+        try:
+            result = _extract_info(single_url, noplaylist=False, playlistend=num_videos)
+        except DownloadError as exc:
+            logger.warning(
+                '获取播放列表信息失败，尝试单视频模式',
+                url=single_url,
+                error=str(exc)
+            )
+            try:
+                result = _extract_info(single_url, noplaylist=True)
+            except DownloadError as single_exc:
+                logger.error(
+                    '单视频模式仍无法获取信息，请检查Cookies或账号是否登录',
+                    url=single_url,
+                    error=str(single_exc)
+                )
+                continue
 
         if not result:
             logger.warning('未从链接获取到任何视频信息', url=single_url)
