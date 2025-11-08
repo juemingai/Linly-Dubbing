@@ -135,15 +135,22 @@ def process_video(info, root_folder, resolution,
                 folder = os.path.dirname(info)
                 # os.rename(info, os.path.join(folder, 'download.mp4'))
             else:
+                if info is None:
+                    error_msg = '视频信息为None，无法下载'
+                    logger.error(error_msg)
+                    return False, None, error_msg
+                
                 folder = get_target_folder(info, root_folder)
                 if folder is None:
-                    error_msg = f'无法获取视频目标文件夹: {info["title"]}'
+                    title = info.get('title', 'Unknown') if info else 'Unknown'
+                    error_msg = f'无法获取视频目标文件夹: {title}'
                     logger.warning(error_msg)
                     return False, None, error_msg
 
                 folder = download_single_video(info, root_folder, resolution)
                 if folder is None:
-                    error_msg = f'下载视频失败: {info["title"]}'
+                    title = info.get('title', 'Unknown') if info else 'Unknown'
+                    error_msg = f'下载视频失败: {title}'
                     logger.warning(error_msg)
                     return False, None, error_msg
 
