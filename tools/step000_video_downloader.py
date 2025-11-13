@@ -169,11 +169,13 @@ def get_info_list_from_url(url, num_videos):
     # Download JSON information first
     ydl_opts = {
         'dumpjson': True,
+        'playlistend': num_videos,
         'ignoreerrors': True,
         'noplaylist': True,  # 强制只下载单个视频，忽略播放列表
         'quiet': True,
         'no_warnings': True,
         'cookiefile': 'cookies.txt' if os.path.exists("cookies.txt") else None,
+        'cookiesfrombrowser': ('chrome',) if not os.path.exists("cookies.txt") else None,  # 从chrome浏览器中获取cookie
     }
 
     # video_info_list = []
@@ -184,7 +186,7 @@ def get_info_list_from_url(url, num_videos):
                 if result is None:
                     logger.warning(f'无法获取视频信息: {u}，可能需要Cookie验证')
                     continue
-                
+
                 # 由于使用了noplaylist=True，result应该是单个视频，不会是播放列表
                 if result and isinstance(result, dict):
                     # 确保有必需的字段
