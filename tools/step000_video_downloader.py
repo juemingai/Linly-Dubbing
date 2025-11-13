@@ -101,8 +101,8 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'cookiefile': cookie_file if use_cookie else None,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],  # 尝试使用 Android 和 Web 客户端
-                    'player_skip': ['webpage', 'configs'],  # 跳过某些检查
+                    'player_client': ['web'],  # 只使用 web 客户端（android 不支持 cookies）
+                    'player_skip': ['configs'],  # 跳过某些检查
                 }
             },
         }
@@ -192,8 +192,8 @@ def get_info_list_from_url(url, num_videos):
         'no_warnings': False,  # 改为 False 显示警告信息
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],  # 尝试使用 Android 和 Web 客户端
-                'player_skip': ['webpage', 'configs'],  # 跳过某些检查
+                'player_client': ['web'],  # 只使用 web 客户端（android 不支持 cookies）
+                'player_skip': ['configs'],  # 跳过某些检查
             }
         },
     }
