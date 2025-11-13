@@ -167,10 +167,9 @@ full_auto_interface = gr.Interface(
 
         # YouTube Cookie 文件上传
         gr.File(
-            label='YouTube Cookies 文件 (可选)',
+            label='YouTube Cookies 文件 (可选) - 上传 cookies.txt 解决 YouTube 验证问题',
             file_types=['.txt'],
-            type='filepath',
-            info='上传 cookies.txt 文件以解决 YouTube "Sign in to confirm you\'re not a bot" 错误。获取方法: yt-dlp --cookies-from-browser chrome --cookies cookies.txt'
+            type='filepath'
         ),
     ],
     outputs=[gr.Text(label='合成状态'), gr.Video(label='合成视频样例结果')],
@@ -197,10 +196,9 @@ download_interface = gr.Interface(
         gr.Slider(minimum=1, maximum=100, step=1, label='下载视频数量', value=5),
         # YouTube Cookie 文件上传
         gr.File(
-            label='YouTube Cookies 文件 (可选)',
+            label='YouTube Cookies 文件 (可选) - 上传 cookies.txt 解决 YouTube 验证问题',
             file_types=['.txt'],
-            type='filepath',
-            info='上传 cookies.txt 文件以解决 YouTube "Sign in to confirm you\'re not a bot" 错误'
+            type='filepath'
         ),
     ],
     outputs=[
