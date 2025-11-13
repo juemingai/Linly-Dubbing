@@ -44,15 +44,35 @@ available_tts_methods = get_available_tts_methods()
 all_supported_languages = get_all_supported_languages()
 
 def handle_cookie_upload(cookie_file):
-    """处理用户上传的 cookies.txt 文件"""
+    """
+    处理用户上传的 cookies 文件
+
+    支持：
+    - 任意文件名（会自动重命名为 cookies.txt）
+    - 多次上传会覆盖旧文件（适用于 cookie 过期后重新上传）
+    """
     if cookie_file is None:
         logger.warning("handle_cookie_upload: 未上传 cookie 文件")
         return "未上传 cookie 文件"
 
     try:
         target_path = os.path.join(os.getcwd(), 'cookies.txt')
+
+        # 获取上传的原始文件名
+        upload_filename = os.path.basename(cookie_file.name) if hasattr(cookie_file, 'name') else 'unknown'
+        logger.info(f'handle_cookie_upload: 上传的文件名: {upload_filename}')
         logger.info(f'handle_cookie_upload: 上传的文件路径: {cookie_file.name}')
         logger.info(f'handle_cookie_upload: 目标路径: {target_path}')
+
+        # 检查是否存在旧文件
+        old_file_exists = os.path.exists(target_path)
+        if old_file_exists:
+            old_size = os.path.getsize(target_path)
+            old_mtime = os.path.getmtime(target_path)
+            from datetime import datetime
+            old_time_str = datetime.fromtimestamp(old_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            logger.info(f'handle_cookie_upload: 检测到旧的 cookies.txt，大小: {old_size} 字节，创建时间: {old_time_str}')
+            logger.info(f'handle_cookie_upload: 将覆盖旧文件')
 
         # 读取源文件内容
         with open(cookie_file.name, 'r', encoding='utf-8') as f:
@@ -60,19 +80,19 @@ def handle_cookie_upload(cookie_file):
 
         source_size = len(source_content)
         source_lines = source_content.split('\n')
-        logger.info(f'handle_cookie_upload: 源文件大小: {source_size} 字节，行数: {len(source_lines)}')
-        logger.info(f'handle_cookie_upload: 源文件前3行: {source_lines[:3]}')
-        logger.info(f'handle_cookie_upload: 源文件后3行: {source_lines[-3:]}')
+        logger.info(f'handle_cookie_upload: 新文件大小: {source_size} 字节，行数: {len(source_lines)}')
+        logger.info(f'handle_cookie_upload: 新文件前3行: {source_lines[:3]}')
+        logger.info(f'handle_cookie_upload: 新文件后3行: {source_lines[-3:]}')
 
         # 计算源文件 MD5
         import hashlib
         source_md5 = hashlib.md5(source_content.encode('utf-8')).hexdigest()
-        logger.info(f'handle_cookie_upload: 源文件 MD5: {source_md5}')
+        logger.info(f'handle_cookie_upload: 新文件 MD5: {source_md5}')
 
         # 删除旧文件（如果存在）
-        if os.path.exists(target_path):
+        if old_file_exists:
             os.remove(target_path)
-            logger.info(f'handle_cookie_upload: 已删除旧的 cookies.txt')
+            logger.info(f'handle_cookie_upload: ✅ 已删除旧的 cookies.txt，准备写入新文件')
 
         # 直接写入内容到目标文件
         with open(target_path, 'w', encoding='utf-8') as f:
@@ -96,7 +116,27 @@ def handle_cookie_upload(cookie_file):
             # 比对 MD5
             if source_md5 == target_md5:
                 logger.info(f'handle_cookie_upload: ✅ 文件内容验证成功（MD5 匹配）')
-                return f"✅ Cookie 文件上传成功！路径: {target_path}，大小: {target_size} 字节，MD5: {target_md5[:8]}"
+
+                # 生成友好的返回消息
+                from datetime import datetime
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+                if old_file_exists:
+                    msg = f"✅ Cookie 文件已更新！\n"
+                    msg += f"- 原始文件名: {upload_filename}\n"
+                    msg += f"- 保存为: cookies.txt\n"
+                    msg += f"- 已覆盖旧文件（旧: {old_size} 字节 → 新: {target_size} 字节）\n"
+                    msg += f"- 更新时间: {now_str}\n"
+                    msg += f"- MD5: {target_md5[:16]}"
+                else:
+                    msg = f"✅ Cookie 文件上传成功！\n"
+                    msg += f"- 原始文件名: {upload_filename}\n"
+                    msg += f"- 保存为: cookies.txt\n"
+                    msg += f"- 文件大小: {target_size} 字节\n"
+                    msg += f"- 上传时间: {now_str}\n"
+                    msg += f"- MD5: {target_md5[:16]}"
+
+                return msg
             else:
                 logger.error(f'handle_cookie_upload: ❌ 文件内容不匹配！源 MD5: {source_md5}, 目标 MD5: {target_md5}')
                 return f"❌ Cookie 文件内容验证失败（MD5 不匹配）"
@@ -218,7 +258,7 @@ full_auto_interface = gr.Interface(
 
         # YouTube Cookie 文件上传
         gr.File(
-            label='YouTube Cookies 文件 (可选) - 上传 cookies.txt 解决 YouTube 验证问题',
+            label='YouTube Cookies 文件 (可选) - 任意文件名会自动保存为 cookies.txt，多次上传会覆盖',
             type='filepath'
         ),
     ],
@@ -246,7 +286,7 @@ download_interface = gr.Interface(
         gr.Slider(minimum=1, maximum=100, step=1, label='下载视频数量', value=5),
         # YouTube Cookie 文件上传
         gr.File(
-            label='YouTube Cookies 文件 (可选) - 上传 cookies.txt 解决 YouTube 验证问题',
+            label='YouTube Cookies 文件 (可选) - 任意文件名会自动保存为 cookies.txt，多次上传会覆盖',
             type='filepath'
         ),
     ],
