@@ -76,10 +76,22 @@ def download_single_video(info, folder_path, resolution='1080p'):
     # 检查 cookies.txt 文件（使用绝对路径）
     cookie_file = os.path.join(os.getcwd(), 'cookies.txt')
     use_cookie = os.path.exists(cookie_file)
+    temp_cookie_path = None
+
     if use_cookie:
         logger.info(f'download_single_video: 检测到 cookies.txt，路径: {cookie_file}')
         file_size = os.path.getsize(cookie_file)
         logger.info(f'download_single_video: cookies.txt 文件大小: {file_size} 字节')
+
+        # 创建临时副本，避免 yt-dlp 修改原始文件
+        import shutil
+        import tempfile
+        temp_cookie = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
+        temp_cookie_path = temp_cookie.name
+        temp_cookie.close()
+
+        shutil.copy(cookie_file, temp_cookie_path)
+        logger.info(f'download_single_video: 创建 cookie 临时副本: {temp_cookie_path}')
     else:
         logger.warning(f'download_single_video: 未找到 cookies.txt，路径: {cookie_file}')
 
@@ -99,7 +111,7 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'retries': 5,
             'fragment_retries': 10,
             'continuedl': True,
-            'cookiefile': cookie_file if use_cookie else None,
+            'cookiefile': temp_cookie_path if use_cookie else None,
             # 移除 extractor_args，让 yt-dlp 使用默认行为
         }
 
@@ -117,6 +129,10 @@ def download_single_video(info, folder_path, resolution='1080p'):
             # 先检查标准 mp4 文件
             if os.path.exists(download_path):
                 logger.info(f'Video downloaded in {output_folder}')
+                # 清理临时 cookie 文件
+                if temp_cookie_path and os.path.exists(temp_cookie_path):
+                    os.remove(temp_cookie_path)
+                    logger.debug(f'已删除临时 cookie 文件: {temp_cookie_path}')
                 return output_folder
 
             # 尝试查找所有可能的下载文件
@@ -137,6 +153,10 @@ def download_single_video(info, folder_path, resolution='1080p'):
                     logger.info(f'重命名为: {download_path}')
 
                 logger.info(f'Video downloaded in {output_folder}')
+                # 清理临时 cookie 文件
+                if temp_cookie_path and os.path.exists(temp_cookie_path):
+                    os.remove(temp_cookie_path)
+                    logger.debug(f'已删除临时 cookie 文件: {temp_cookie_path}')
                 return output_folder
 
             # 没找到任何视频文件
@@ -148,12 +168,20 @@ def download_single_video(info, folder_path, resolution='1080p'):
             if 'sign in' in error_str or 'bot' in error_str or 'cookies' in error_str:
                 logger.error(f'下载视频失败: {info.get("title", "Unknown")}, YouTube要求Cookie验证')
                 logger.error('请配置cookies.txt文件或使用浏览器Cookie')
+                # 清理临时 cookie 文件
+                if temp_cookie_path and os.path.exists(temp_cookie_path):
+                    os.remove(temp_cookie_path)
+                    logger.debug(f'已删除临时 cookie 文件: {temp_cookie_path}')
                 return None
             logger.warning(f'格式 {selector} 下载失败，尝试下一种格式: {e}')
             continue
-    
+
     # 所有格式都失败
     logger.error(f'所有格式下载都失败: {info.get("title", "Unknown")}, 最后错误: {last_error}')
+    # 清理临时 cookie 文件
+    if temp_cookie_path and os.path.exists(temp_cookie_path):
+        os.remove(temp_cookie_path)
+        logger.debug(f'已删除临时 cookie 文件: {temp_cookie_path}')
     return None
 
 def download_videos(info_list, folder_path, resolution='1080p'):
@@ -217,8 +245,18 @@ def get_info_list_from_url(url, num_videos):
     # 添加cookie支持（使用绝对路径）
     cookie_file = os.path.join(os.getcwd(), 'cookies.txt')
     if os.path.exists(cookie_file):
-        ydl_opts['cookiefile'] = cookie_file
-        logger.info(f'get_info_list_from_url: 使用 cookies.txt 进行 YouTube 验证，路径: {cookie_file}')
+        # 创建临时副本，避免 yt-dlp 修改原始文件
+        import shutil
+        import tempfile
+        temp_cookie = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
+        temp_cookie_path = temp_cookie.name
+        temp_cookie.close()
+
+        shutil.copy(cookie_file, temp_cookie_path)
+        logger.info(f'get_info_list_from_url: 创建 cookie 临时副本: {temp_cookie_path}')
+
+        ydl_opts['cookiefile'] = temp_cookie_path
+        logger.info(f'get_info_list_from_url: 使用 cookies.txt 进行 YouTube 验证，原始路径: {cookie_file}')
         # 检查文件大小
         file_size = os.path.getsize(cookie_file)
         logger.info(f'cookies.txt 文件大小: {file_size} 字节')
