@@ -85,29 +85,26 @@ def download_single_video(info, folder_path, resolution='1080p'):
 
     last_error = None
     for selector in format_candidates:
+        # 简化配置，移除可能干扰的参数
         ydl_opts = {
             'format': selector,
             'outtmpl': os.path.join(folder_path, sanitized_uploader, f'{upload_date} {sanitized_title}', 'download'),
             'merge_output_format': 'mp4',
             'writeinfojson': True,
             'writethumbnail': True,
-            'quiet': False,  # 显示详细错误
-            'no_warnings': False,  # 显示警告信息
+            'quiet': False,  # 显示详细输出
+            'no_warnings': False,  # 显示警告
             'ignoreerrors': True,
             'noplaylist': True,  # 强制只下载单个视频
             'retries': 5,
             'fragment_retries': 10,
             'continuedl': True,
             'cookiefile': cookie_file if use_cookie else None,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['web'],  # 只使用 web 客户端（android 不支持 cookies）
-                    'player_skip': ['configs'],  # 跳过某些检查
-                }
-            },
+            # 移除 extractor_args，让 yt-dlp 使用默认行为
         }
 
         logger.debug(f'ydl_opts cookiefile配置: {ydl_opts.get("cookiefile")}')
+        logger.debug(f'ydl_opts 完整配置: {ydl_opts}')
 
         try:
             logger.debug(f'尝试使用格式下载: {selector}')
@@ -183,20 +180,23 @@ def get_info_list_from_url(url, num_videos):
             logger.info(f'规范化URL: {u} -> {normalized}')
 
     # Download JSON information first
+    # 尽可能简化配置，接近命令行 yt-dlp --cookies cookies.txt 的行为
     ydl_opts = {
         'dumpjson': True,
         'playlistend': num_videos,
         'ignoreerrors': True,
         'noplaylist': True,  # 强制只下载单个视频，忽略播放列表
-        'quiet': False,  # 改为 False 显示详细错误
-        'no_warnings': False,  # 改为 False 显示警告信息
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web'],  # 只使用 web 客户端（android 不支持 cookies）
-                'player_skip': ['configs'],  # 跳过某些检查
-            }
-        },
+        'quiet': False,  # 显示详细输出
+        'no_warnings': False,  # 显示警告
+        # 移除 extractor_args，让 yt-dlp 使用默认行为
     }
+
+    # 打印 yt-dlp 版本信息
+    try:
+        import yt_dlp
+        logger.info(f'yt-dlp 版本: {yt_dlp.version.__version__}')
+    except Exception as e:
+        logger.warning(f'无法获取 yt-dlp 版本: {str(e)}')
 
     # 添加cookie支持（使用绝对路径）
     cookie_file = os.path.join(os.getcwd(), 'cookies.txt')
@@ -224,6 +224,8 @@ def get_info_list_from_url(url, num_videos):
             logger.error(f'读取 cookies.txt 内容失败: {str(e)}')
     else:
         logger.warning(f'get_info_list_from_url: 未找到 cookies.txt，路径: {cookie_file}')
+
+    logger.info(f'ydl_opts 最终配置: {ydl_opts}')
 
     # video_info_list = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
