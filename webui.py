@@ -50,24 +50,56 @@ def handle_cookie_upload(cookie_file):
         return "未上传 cookie 文件"
 
     try:
-        # 将上传的文件复制到项目根目录，命名为 cookies.txt
         target_path = os.path.join(os.getcwd(), 'cookies.txt')
         logger.info(f'handle_cookie_upload: 上传的文件路径: {cookie_file.name}')
         logger.info(f'handle_cookie_upload: 目标路径: {target_path}')
 
-        shutil.copy(cookie_file.name, target_path)
+        # 读取源文件内容
+        with open(cookie_file.name, 'r', encoding='utf-8') as f:
+            source_content = f.read()
 
-        # 验证文件是否成功保存
+        source_size = len(source_content)
+        source_lines = source_content.split('\n')
+        logger.info(f'handle_cookie_upload: 源文件大小: {source_size} 字节，行数: {len(source_lines)}')
+        logger.info(f'handle_cookie_upload: 源文件前3行: {source_lines[:3]}')
+        logger.info(f'handle_cookie_upload: 源文件后3行: {source_lines[-3:]}')
+
+        # 计算源文件 MD5
+        import hashlib
+        source_md5 = hashlib.md5(source_content.encode('utf-8')).hexdigest()
+        logger.info(f'handle_cookie_upload: 源文件 MD5: {source_md5}')
+
+        # 删除旧文件（如果存在）
         if os.path.exists(target_path):
-            file_size = os.path.getsize(target_path)
-            logger.info(f'handle_cookie_upload: Cookie 文件已保存，大小: {file_size} 字节')
+            os.remove(target_path)
+            logger.info(f'handle_cookie_upload: 已删除旧的 cookies.txt')
 
-            # 读取前100个字符验证格式
+        # 直接写入内容到目标文件
+        with open(target_path, 'w', encoding='utf-8') as f:
+            f.write(source_content)
+
+        logger.info(f'handle_cookie_upload: 文件写入完成')
+
+        # 验证写入的文件
+        if os.path.exists(target_path):
             with open(target_path, 'r', encoding='utf-8') as f:
-                first_line = f.readline().strip()
-                logger.info(f'handle_cookie_upload: cookies.txt 首行内容: {first_line[:100]}...')
+                target_content = f.read()
 
-            return f"✅ Cookie 文件上传成功！路径: {target_path}，大小: {file_size} 字节"
+            target_size = len(target_content)
+            target_lines = target_content.split('\n')
+            target_md5 = hashlib.md5(target_content.encode('utf-8')).hexdigest()
+
+            logger.info(f'handle_cookie_upload: 目标文件大小: {target_size} 字节，行数: {len(target_lines)}')
+            logger.info(f'handle_cookie_upload: 目标文件 MD5: {target_md5}')
+            logger.info(f'handle_cookie_upload: 目标文件前3行: {target_lines[:3]}')
+
+            # 比对 MD5
+            if source_md5 == target_md5:
+                logger.info(f'handle_cookie_upload: ✅ 文件内容验证成功（MD5 匹配）')
+                return f"✅ Cookie 文件上传成功！路径: {target_path}，大小: {target_size} 字节，MD5: {target_md5[:8]}"
+            else:
+                logger.error(f'handle_cookie_upload: ❌ 文件内容不匹配！源 MD5: {source_md5}, 目标 MD5: {target_md5}')
+                return f"❌ Cookie 文件内容验证失败（MD5 不匹配）"
         else:
             logger.error(f'handle_cookie_upload: 文件保存后未找到: {target_path}')
             return f"❌ Cookie 文件保存失败"
