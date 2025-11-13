@@ -9,6 +9,9 @@ from tools.do_everything import do_everything
 import threading
 import queue
 import time
+import os
+import shutil
+from loguru import logger
 from tools.utils import SUPPORT_VOICE
 
 # 获取可用的TTS方法
@@ -39,6 +42,21 @@ def get_all_supported_languages():
 
 available_tts_methods = get_available_tts_methods()
 all_supported_languages = get_all_supported_languages()
+
+def handle_cookie_upload(cookie_file):
+    """处理用户上传的 cookies.txt 文件"""
+    if cookie_file is None:
+        return "未上传 cookie 文件"
+
+    try:
+        # 将上传的文件复制到项目根目录，命名为 cookies.txt
+        target_path = os.path.join(os.getcwd(), 'cookies.txt')
+        shutil.copy(cookie_file.name, target_path)
+        logger.info(f'Cookie 文件已保存到: {target_path}')
+        return f"✅ Cookie 文件上传成功！路径: {target_path}"
+    except Exception as e:
+        logger.error(f'保存 cookie 文件失败: {str(e)}')
+        return f"❌ Cookie 文件上传失败: {str(e)}"
 
 def do_everything_with_timeout(*args, timeout=300, **kwargs):
     """
@@ -77,23 +95,28 @@ def do_everything_with_timeout(*args, timeout=300, **kwargs):
     else:
         return "处理完成但未返回结果", None
 
-# 包装一键自动化函数以支持 Minimax voice_id
+# 包装一键自动化函数以支持 Minimax voice_id 和 cookie 上传
 def do_everything_with_minimax(*args, **kwargs):
-    """一键自动化包装函数，支持Minimax音色ID"""
-    # 从参数中提取minimax_voice_id（倒数第二个参数）
+    """一键自动化包装函数，支持Minimax音色ID和Cookie上传"""
+    # 从参数中提取最后两个参数: minimax_voice_id 和 cookie_file
     args_list = list(args)
-    minimax_voice_id = args_list[-1] if len(args_list) > 0 else ''
-    
-    # 移除minimax_voice_id参数，保持原有参数数量
-    args_without_voice_id = args_list[:-1]
-    
+    cookie_file = args_list[-1] if len(args_list) > 0 else None
+    minimax_voice_id = args_list[-2] if len(args_list) > 1 else ''
+
+    # 处理 cookie 文件上传
+    if cookie_file is not None:
+        handle_cookie_upload(cookie_file)
+
+    # 移除这两个参数，保持原有参数数量
+    args_without_extra = args_list[:-2]
+
     # 如果选择了minimax方法且提供了voice_id，添加到kwargs
-    if len(args_without_voice_id) >= 15:  # 确保有足够的参数
-        tts_method = args_without_voice_id[14]  # TTS方法参数位置
+    if len(args_without_extra) >= 15:  # 确保有足够的参数
+        tts_method = args_without_extra[14]  # TTS方法参数位置
         if tts_method == 'minimax' and minimax_voice_id.strip():
             kwargs['voice_id'] = minimax_voice_id.strip()
-    
-    return do_everything_with_timeout(*args_without_voice_id, **kwargs)
+
+    return do_everything_with_timeout(*args_without_extra, **kwargs)
 
 # 一键自动化界面
 full_auto_interface = gr.Interface(
@@ -136,26 +159,49 @@ full_auto_interface = gr.Interface(
         
         # 新增 Minimax 音色ID 输入框
         gr.Textbox(
-            label='Minimax音色ID (仅在选择minimax时使用)', 
+            label='Minimax音色ID (仅在选择minimax时使用)',
             value='cobra_design_20250717_162427_683071',
             placeholder='如: cobra_design_20250717_162427_683071',
             info='仅当AI语音生成方法选择minimax时有效。默认: 都市白领音色'
+        ),
+
+        # YouTube Cookie 文件上传
+        gr.File(
+            label='YouTube Cookies 文件 (可选)',
+            file_types=['.txt'],
+            type='filepath',
+            info='上传 cookies.txt 文件以解决 YouTube "Sign in to confirm you\'re not a bot" 错误。获取方法: yt-dlp --cookies-from-browser chrome --cookies cookies.txt'
         ),
     ],
     outputs=[gr.Text(label='合成状态'), gr.Video(label='合成视频样例结果')],
     allow_flagging='never',
 )    
 
+# 包装下载函数以支持 cookie 上传
+def download_with_cookie(url, folder_path, resolution, num_videos, cookie_file):
+    """下载视频包装函数，支持Cookie上传"""
+    # 处理 cookie 文件上传
+    if cookie_file is not None:
+        handle_cookie_upload(cookie_file)
+
+    return download_from_url(url, folder_path, resolution, num_videos)
+
 # 下载视频接口
 download_interface = gr.Interface(
-    fn=download_from_url,
+    fn=download_with_cookie,
     inputs=[
-        gr.Textbox(label='视频URL', placeholder='请输入Youtube或Bilibili的视频、播放列表或频道的URL', 
+        gr.Textbox(label='视频URL', placeholder='请输入Youtube或Bilibili的视频、播放列表或频道的URL',
                    value='https://www.bilibili.com/video/BV1kr421M7vz/'),
         gr.Textbox(label='视频输出文件夹', value='videos'),
         gr.Radio(['4320p', '2160p', '1440p', '1080p', '720p', '480p', '360p', '240p', '144p'], label='分辨率', value='1080p'),
         gr.Slider(minimum=1, maximum=100, step=1, label='下载视频数量', value=5),
-        # gr.Checkbox(label='单个视频', value=False),
+        # YouTube Cookie 文件上传
+        gr.File(
+            label='YouTube Cookies 文件 (可选)',
+            file_types=['.txt'],
+            type='filepath',
+            info='上传 cookies.txt 文件以解决 YouTube "Sign in to confirm you\'re not a bot" 错误'
+        ),
     ],
     outputs=[
         gr.Textbox(label='下载状态'), 
