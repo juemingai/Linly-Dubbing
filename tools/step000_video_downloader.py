@@ -110,22 +110,38 @@ def download_single_video(info, folder_path, resolution='1080p'):
             logger.debug(f'尝试使用格式下载: {selector}')
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([video_url])
-            
-            # 检查文件是否下载成功
+
+            # 检查文件是否下载成功 - 更全面的文件搜索
             download_path = os.path.join(output_folder, 'download.mp4')
+
+            # 先检查标准 mp4 文件
             if os.path.exists(download_path):
                 logger.info(f'Video downloaded in {output_folder}')
                 return output_folder
-            else:
-                # 尝试查找其他格式的文件
-                for ext in ['.mp4', '.webm', '.mkv']:
-                    alt_path = os.path.join(output_folder, f'download{ext}')
-                    if os.path.exists(alt_path):
-                        # 重命名为mp4
-                        os.rename(alt_path, download_path)
-                        logger.info(f'Video downloaded in {output_folder}')
-                        return output_folder
-                raise FileNotFoundError('下载的文件未找到')
+
+            # 尝试查找所有可能的下载文件
+            import glob
+            possible_files = glob.glob(os.path.join(output_folder, 'download*'))
+            logger.debug(f'在 {output_folder} 找到的文件: {possible_files}')
+
+            # 排除 .info.json 和 .webp (缩略图) 等元数据文件
+            video_files = [f for f in possible_files if not f.endswith(('.info.json', '.webp', '.jpg', '.png'))]
+
+            if video_files:
+                # 找到视频文件，重命名为 download.mp4
+                source_file = video_files[0]
+                logger.info(f'找到下载文件: {source_file}')
+
+                if source_file != download_path:
+                    os.rename(source_file, download_path)
+                    logger.info(f'重命名为: {download_path}')
+
+                logger.info(f'Video downloaded in {output_folder}')
+                return output_folder
+
+            # 没找到任何视频文件
+            logger.error(f'在 {output_folder} 未找到视频文件')
+            raise FileNotFoundError('下载的文件未找到')
         except Exception as e:
             last_error = e
             error_str = str(e).lower()
