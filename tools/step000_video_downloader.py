@@ -174,9 +174,12 @@ def get_info_list_from_url(url, num_videos):
         'noplaylist': True,  # 强制只下载单个视频，忽略播放列表
         'quiet': True,
         'no_warnings': True,
-        'cookiefile': 'cookies.txt' if os.path.exists("cookies.txt") else None,
-        'cookiesfrombrowser': ('chrome',) if not os.path.exists("cookies.txt") else None,  # 从chrome浏览器中获取cookie
     }
+
+    # 添加cookie支持（如果cookies.txt存在）
+    if os.path.exists("cookies.txt"):
+        ydl_opts['cookiefile'] = 'cookies.txt'
+        logger.info('使用cookies.txt进行YouTube验证')
 
     # video_info_list = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
