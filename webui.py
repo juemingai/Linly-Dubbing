@@ -168,7 +168,6 @@ full_auto_interface = gr.Interface(
         # YouTube Cookie 文件上传
         gr.File(
             label='YouTube Cookies 文件 (可选) - 上传 cookies.txt 解决 YouTube 验证问题',
-            file_types=['.txt'],
             type='filepath'
         ),
     ],
@@ -197,7 +196,6 @@ download_interface = gr.Interface(
         # YouTube Cookie 文件上传
         gr.File(
             label='YouTube Cookies 文件 (可选) - 上传 cookies.txt 解决 YouTube 验证问题',
-            file_types=['.txt'],
             type='filepath'
         ),
     ],
