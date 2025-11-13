@@ -73,6 +73,14 @@ def download_single_video(info, folder_path, resolution='1080p'):
         'best'
     ]
     
+    # 检查 cookies.txt 文件（使用绝对路径）
+    cookie_file = os.path.join(os.getcwd(), 'cookies.txt')
+    use_cookie = os.path.exists(cookie_file)
+    if use_cookie:
+        logger.info(f'download_single_video: 检测到 cookies.txt，路径: {cookie_file}')
+    else:
+        logger.warning(f'download_single_video: 未找到 cookies.txt，路径: {cookie_file}')
+
     last_error = None
     for selector in format_candidates:
         ydl_opts = {
@@ -88,10 +96,10 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'retries': 5,
             'fragment_retries': 10,
             'continuedl': True,
-            'cookiefile': 'cookies.txt' if os.path.exists("cookies.txt") else None,
-            # 'cookiesfrombrowser': ('chrome', ), # 从chrome浏览器中获取cookie 
-            # 'cookiesfrombrowser': ('firefox', 'default', None, 'Meta') # 从firefox浏览器中获取cookie
+            'cookiefile': cookie_file if use_cookie else None,
         }
+
+        logger.debug(f'ydl_opts cookiefile配置: {ydl_opts.get("cookiefile")}')
 
         try:
             logger.debug(f'尝试使用格式下载: {selector}')
@@ -176,10 +184,16 @@ def get_info_list_from_url(url, num_videos):
         'no_warnings': True,
     }
 
-    # 添加cookie支持（如果cookies.txt存在）
-    if os.path.exists("cookies.txt"):
-        ydl_opts['cookiefile'] = 'cookies.txt'
-        logger.info('使用cookies.txt进行YouTube验证')
+    # 添加cookie支持（使用绝对路径）
+    cookie_file = os.path.join(os.getcwd(), 'cookies.txt')
+    if os.path.exists(cookie_file):
+        ydl_opts['cookiefile'] = cookie_file
+        logger.info(f'get_info_list_from_url: 使用 cookies.txt 进行 YouTube 验证，路径: {cookie_file}')
+        # 检查文件大小
+        file_size = os.path.getsize(cookie_file)
+        logger.info(f'cookies.txt 文件大小: {file_size} 字节')
+    else:
+        logger.warning(f'get_info_list_from_url: 未找到 cookies.txt，路径: {cookie_file}')
 
     # video_info_list = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

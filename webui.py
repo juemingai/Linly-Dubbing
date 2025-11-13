@@ -46,16 +46,35 @@ all_supported_languages = get_all_supported_languages()
 def handle_cookie_upload(cookie_file):
     """处理用户上传的 cookies.txt 文件"""
     if cookie_file is None:
+        logger.warning("handle_cookie_upload: 未上传 cookie 文件")
         return "未上传 cookie 文件"
 
     try:
         # 将上传的文件复制到项目根目录，命名为 cookies.txt
         target_path = os.path.join(os.getcwd(), 'cookies.txt')
+        logger.info(f'handle_cookie_upload: 上传的文件路径: {cookie_file.name}')
+        logger.info(f'handle_cookie_upload: 目标路径: {target_path}')
+
         shutil.copy(cookie_file.name, target_path)
-        logger.info(f'Cookie 文件已保存到: {target_path}')
-        return f"✅ Cookie 文件上传成功！路径: {target_path}"
+
+        # 验证文件是否成功保存
+        if os.path.exists(target_path):
+            file_size = os.path.getsize(target_path)
+            logger.info(f'handle_cookie_upload: Cookie 文件已保存，大小: {file_size} 字节')
+
+            # 读取前100个字符验证格式
+            with open(target_path, 'r', encoding='utf-8') as f:
+                first_line = f.readline().strip()
+                logger.info(f'handle_cookie_upload: cookies.txt 首行内容: {first_line[:100]}...')
+
+            return f"✅ Cookie 文件上传成功！路径: {target_path}，大小: {file_size} 字节"
+        else:
+            logger.error(f'handle_cookie_upload: 文件保存后未找到: {target_path}')
+            return f"❌ Cookie 文件保存失败"
     except Exception as e:
-        logger.error(f'保存 cookie 文件失败: {str(e)}')
+        logger.error(f'handle_cookie_upload: 保存 cookie 文件失败: {str(e)}')
+        import traceback
+        logger.error(f'handle_cookie_upload: 异常堆栈: {traceback.format_exc()}')
         return f"❌ Cookie 文件上传失败: {str(e)}"
 
 def do_everything_with_timeout(*args, timeout=300, **kwargs):
