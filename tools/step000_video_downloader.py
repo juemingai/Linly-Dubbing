@@ -68,13 +68,17 @@ def get_info_list_from_url(url, num_videos):
         'None': "b",
         'dumpjson': True,
         'playlistend': num_videos,
-        'ignoreerrors': True
+        'ignoreerrors': True,
+        'cookiesfrombrowser': ('chrome',),  # 从chrome浏览器中获取cookie
     }
 
     # video_info_list = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         for u in url:
             result = ydl.extract_info(u, download=False)
+            if result is None:
+                logger.error(f'无法获取视频信息: {u}')
+                continue
             if 'entries' in result:
                 # Playlist
                 # video_info_list.extend(result['entries'])
