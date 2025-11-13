@@ -78,6 +78,8 @@ def download_single_video(info, folder_path, resolution='1080p'):
     use_cookie = os.path.exists(cookie_file)
     if use_cookie:
         logger.info(f'download_single_video: 检测到 cookies.txt，路径: {cookie_file}')
+        file_size = os.path.getsize(cookie_file)
+        logger.info(f'download_single_video: cookies.txt 文件大小: {file_size} 字节')
     else:
         logger.warning(f'download_single_video: 未找到 cookies.txt，路径: {cookie_file}')
 
@@ -89,14 +91,20 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'merge_output_format': 'mp4',
             'writeinfojson': True,
             'writethumbnail': True,
-            'quiet': True,
-            'no_warnings': True,
+            'quiet': False,  # 显示详细错误
+            'no_warnings': False,  # 显示警告信息
             'ignoreerrors': True,
             'noplaylist': True,  # 强制只下载单个视频
             'retries': 5,
             'fragment_retries': 10,
             'continuedl': True,
             'cookiefile': cookie_file if use_cookie else None,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],  # 尝试使用 Android 和 Web 客户端
+                    'player_skip': ['webpage', 'configs'],  # 跳过某些检查
+                }
+            },
         }
 
         logger.debug(f'ydl_opts cookiefile配置: {ydl_opts.get("cookiefile")}')
@@ -180,8 +188,14 @@ def get_info_list_from_url(url, num_videos):
         'playlistend': num_videos,
         'ignoreerrors': True,
         'noplaylist': True,  # 强制只下载单个视频，忽略播放列表
-        'quiet': True,
-        'no_warnings': True,
+        'quiet': False,  # 改为 False 显示详细错误
+        'no_warnings': False,  # 改为 False 显示警告信息
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],  # 尝试使用 Android 和 Web 客户端
+                'player_skip': ['webpage', 'configs'],  # 跳过某些检查
+            }
+        },
     }
 
     # 添加cookie支持（使用绝对路径）
@@ -192,6 +206,22 @@ def get_info_list_from_url(url, num_videos):
         # 检查文件大小
         file_size = os.path.getsize(cookie_file)
         logger.info(f'cookies.txt 文件大小: {file_size} 字节')
+
+        # 读取并验证 cookie 文件格式
+        try:
+            with open(cookie_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()[:10]  # 读取前10行
+                logger.info(f'cookies.txt 前3行内容:')
+                for i, line in enumerate(lines[:3]):
+                    # 显示制表符（\t）和换行符
+                    display_line = repr(line[:100])
+                    logger.info(f'  行{i+1}: {display_line}')
+
+                # 统计有效的 cookie 行（非注释、非空行）
+                valid_cookies = [l for l in lines if l.strip() and not l.strip().startswith('#')]
+                logger.info(f'cookies.txt 有效cookie行数: {len(valid_cookies)} (前10行中)')
+        except Exception as e:
+            logger.error(f'读取 cookies.txt 内容失败: {str(e)}')
     else:
         logger.warning(f'get_info_list_from_url: 未找到 cookies.txt，路径: {cookie_file}')
 
