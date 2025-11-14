@@ -27,7 +27,9 @@ def load_vad_model(device, vad_onset=0.500, vad_offset=0.363, use_auth_token=Non
         raise RuntimeError(f"{model_fp} exists and is not a regular file")
 
     if not os.path.isfile(model_fp):
-        with urllib.request.urlopen(VAD_SEGMENTATION_URL) as source, open(model_fp, "wb") as output:
+        # 创建支持重定向的请求，解决HuggingFace 301错误
+        req = urllib.request.Request(VAD_SEGMENTATION_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as source, open(model_fp, "wb") as output:
             with tqdm(
                 total=int(source.info().get("Content-Length")),
                 ncols=80,
