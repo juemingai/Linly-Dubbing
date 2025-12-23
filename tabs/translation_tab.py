@@ -21,7 +21,7 @@ class TranslationTab(QWidget):
 
         # 翻译方式
         self.translation_method = QComboBox()
-        self.translation_method.addItems(['OpenAI', 'LLM', 'Google Translate', 'Bing Translate', 'Ernie'])
+        self.translation_method.addItems(['OpenAI', 'LLM', 'Google Translate', 'Bing Translate', 'Ernie', 'Gemini'])
         self.translation_method.setCurrentText('LLM')
         self.layout.addWidget(QLabel("翻译方式"))
         self.layout.addWidget(self.translation_method)

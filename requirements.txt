@@ -17,6 +17,7 @@ python-dotenv
 openai
 audiostretchy
 modelscope
+google-genai
 
 # ASR
 # git+https://github.com/m-bain/whisperx.git
