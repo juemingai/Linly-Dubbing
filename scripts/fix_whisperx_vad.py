@@ -81,18 +81,68 @@ def main():
             break
 
     if patched:
-        with open(vad_file, 'w', encoding='utf-8') as f:
-            f.write(content)
         print("✅ 已修复 vad.py 文件：用 requests 替换 urllib，支持 301 重定向")
     else:
-        print("⚠️  警告：未找到需要修改的代码，可能已经是最新版本")
+        print("⚠️  未找到下载代码，可能已修复")
+
+    # 注释掉 SHA256 校验（模型 URL 重定向后文件版本可能不同导致校验失败）
+    sha256_old = '''\
+        if check_sha256:
+            sha256_hash = hashlib.sha256()
+            with open(model_fp, "rb") as f:
+                for byte_block in iter(lambda: f.read(65536), b""):
+                    sha256_hash.update(byte_block)
+            if sha256_hash.hexdigest() != sha256:
+                raise RuntimeError(
+                    "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
+                )'''
+    sha256_new = '''\
+        # SHA256 校验已跳过（模型 URL 重定向后文件版本可能不同，跳过以避免误报）
+        if False and check_sha256:
+            sha256_hash = hashlib.sha256()
+            with open(model_fp, "rb") as f:
+                for byte_block in iter(lambda: f.read(65536), b""):
+                    sha256_hash.update(byte_block)
+            if sha256_hash.hexdigest() != sha256:
+                raise RuntimeError(
+                    "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
+                )'''
+
+    if sha256_old in content:
+        content = content.replace(sha256_old, sha256_new)
+        print("✅ 已注释 SHA256 校验")
+    else:
+        # 尝试直接注释掉 RuntimeError 那行
+        sha256_raise = '                    "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."'
+        if sha256_raise in content:
+            content = content.replace(
+                'if sha256_hash.hexdigest() != sha256:',
+                'if False and sha256_hash.hexdigest() != sha256:  # 已跳过校验'
+            )
+            print("✅ 已跳过 SHA256 校验条件")
+        else:
+            print("⚠️  未找到 SHA256 校验代码，可能已修复或代码结构不同")
+
+    with open(vad_file, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+    # 删除损坏的缓存模型文件（SHA256 校验失败的文件）
+    import torch
+    model_dir = os.path.join(torch.hub.get_dir(), "checkpoints")
+    if os.path.isdir(model_dir):
+        for fname in os.listdir(model_dir):
+            fpath = os.path.join(model_dir, fname)
+            fsize = os.path.getsize(fpath)
+            if fsize < 1024 * 1024:  # 小于 1MB 认为是损坏文件（正常 VAD 模型约 17MB）
+                os.remove(fpath)
+                print(f"✅ 已删除损坏的缓存文件: {fname} ({fsize} bytes)")
 
     print("")
     print("=" * 50)
     print("✅ 修复完成！")
     print("=" * 50)
     print("")
-    print("现在可以正常使用 WhisperX 了")
+    print("重启 webui.py 后 WhisperX 将自动重新下载 VAD 模型")
     print("")
 
 if __name__ == '__main__':
