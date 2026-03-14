@@ -112,7 +112,12 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'fragment_retries': 10,
             'continuedl': True,
             'cookiefile': temp_cookie_path if use_cookie else None,
-            # 移除 extractor_args，让 yt-dlp 使用默认行为
+            # 使用 mweb 客户端绕过 n-challenge EJS 解密问题
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['mweb', 'web']
+                }
+            },
         }
 
         logger.debug(f'ydl_opts cookiefile配置: {ydl_opts.get("cookiefile")}')
@@ -232,7 +237,12 @@ def get_info_list_from_url(url, num_videos):
         'noplaylist': True,  # 强制只下载单个视频，忽略播放列表
         'quiet': False,  # 显示详细输出
         'no_warnings': False,  # 显示警告
-        # 移除 extractor_args，让 yt-dlp 使用默认行为
+        # 使用 mweb 客户端绕过 n-challenge EJS 解密问题
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['mweb', 'web']
+            }
+        },
     }
 
     # 打印 yt-dlp 版本信息
