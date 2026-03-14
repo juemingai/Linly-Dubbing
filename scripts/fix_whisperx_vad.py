@@ -43,23 +43,49 @@ def main():
     with open(vad_file, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # 替换下载代码
-    old_code = '        with urllib.request.urlopen(VAD_SEGMENTATION_URL) as source, open(model_fp, "wb") as output:'
+    # 替换下载代码：用 requests 替换 urllib，requests 可正确跟随 301 重定向
+    replacements = [
+        # 原始代码（未修改过）
+        (
+            '        with urllib.request.urlopen(VAD_SEGMENTATION_URL) as source, open(model_fp, "wb") as output:',
+            '''\
+        # 使用 requests 替换 urllib，正确跟随 301 重定向
+        import requests as _requests
+        _resp = _requests.get(VAD_SEGMENTATION_URL, stream=True, allow_redirects=True, timeout=60)
+        _resp.raise_for_status()
+        with open(model_fp, "wb") as output:
+            for _chunk in _resp.iter_content(chunk_size=8192):
+                output.write(_chunk)
+        if False:  # 保留缩进结构，原 with 块占位'''
+        ),
+        # 之前用 User-Agent 修改过的版本
+        (
+            '        # 创建支持重定向的请求，解决HuggingFace 301错误\n        req = urllib.request.Request(VAD_SEGMENTATION_URL, headers={\'User-Agent\': \'Mozilla/5.0\'})\n        with urllib.request.urlopen(req) as source, open(model_fp, "wb") as output:',
+            '''\
+        # 使用 requests 替换 urllib，正确跟随 301 重定向
+        import requests as _requests
+        _resp = _requests.get(VAD_SEGMENTATION_URL, stream=True, allow_redirects=True, timeout=60)
+        _resp.raise_for_status()
+        with open(model_fp, "wb") as output:
+            for _chunk in _resp.iter_content(chunk_size=8192):
+                output.write(_chunk)
+        if False:  # 保留缩进结构，原 with 块占位'''
+        ),
+    ]
 
-    new_code = '''        # 创建支持重定向的请求，解决HuggingFace 301错误
-        req = urllib.request.Request(VAD_SEGMENTATION_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as source, open(model_fp, "wb") as output:'''
+    patched = False
+    for old_code, new_code in replacements:
+        if old_code in content:
+            content = content.replace(old_code, new_code)
+            patched = True
+            break
 
-    if old_code in content:
-        content_modified = content.replace(old_code, new_code)
-
-        # 写回文件
+    if patched:
         with open(vad_file, 'w', encoding='utf-8') as f:
-            f.write(content_modified)
-
-        print("✅ 已修复 vad.py 文件，添加301重定向支持")
+            f.write(content)
+        print("✅ 已修复 vad.py 文件：用 requests 替换 urllib，支持 301 重定向")
     else:
-        print("⚠️  警告：未找到需要修改的代码，可能已经修复过了")
+        print("⚠️  警告：未找到需要修改的代码，可能已经是最新版本")
 
     print("")
     print("=" * 50)
