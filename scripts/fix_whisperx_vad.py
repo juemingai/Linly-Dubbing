@@ -118,16 +118,27 @@ def main():
     with open(vad_file, 'w', encoding='utf-8') as f:
         f.write(content)
 
-    # 删除损坏的缓存模型文件（SHA256 校验失败的文件）
+    # 删除损坏的缓存模型文件
+    # vad.py 使用 torch.hub._get_torch_home() 作为模型目录（非 get_dir()/hub 子目录）
     import torch
-    model_dir = os.path.join(torch.hub.get_dir(), "checkpoints")
-    if os.path.isdir(model_dir):
-        for fname in os.listdir(model_dir):
-            fpath = os.path.join(model_dir, fname)
+    torch_home = torch.hub._get_torch_home()
+    model_fp = os.path.join(torch_home, "whisperx-vad-segmentation.bin")
+    if os.path.isfile(model_fp):
+        fsize = os.path.getsize(model_fp)
+        if fsize < 1024 * 1024:  # 小于 1MB 认为是损坏文件（正常 VAD 模型约 17MB）
+            os.remove(model_fp)
+            print(f"✅ 已删除损坏的缓存文件: {model_fp} ({fsize} bytes)")
+        else:
+            print(f"⚠️  已存在模型文件 ({fsize // 1024 // 1024}MB)，跳过删除: {model_fp}")
+    # 兼容旧路径：checkpoints 目录下的损坏文件
+    old_model_dir = os.path.join(torch.hub.get_dir(), "checkpoints")
+    if os.path.isdir(old_model_dir):
+        for fname in os.listdir(old_model_dir):
+            fpath = os.path.join(old_model_dir, fname)
             fsize = os.path.getsize(fpath)
-            if fsize < 1024 * 1024:  # 小于 1MB 认为是损坏文件（正常 VAD 模型约 17MB）
+            if fsize < 1024 * 1024:
                 os.remove(fpath)
-                print(f"✅ 已删除损坏的缓存文件: {fname} ({fsize} bytes)")
+                print(f"✅ 已删除旧路径损坏文件: {fname} ({fsize} bytes)")
 
     print("")
     print("=" * 50)
