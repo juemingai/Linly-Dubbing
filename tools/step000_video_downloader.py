@@ -111,8 +111,7 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'retries': 5,
             'fragment_retries': 10,
             'continuedl': True,
-            'cookiefile': temp_cookie_path if use_cookie else None,
-            # android/ios 客户端无需 n-challenge 也无需 GVS PO Token
+            # android/ios 客户端无需 n-challenge 也无需 GVS PO Token，且不支持 cookiefile
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android', 'ios']
@@ -252,42 +251,14 @@ def get_info_list_from_url(url, num_videos):
     except Exception as e:
         logger.warning(f'无法获取 yt-dlp 版本: {str(e)}')
 
-    # 添加cookie支持（使用绝对路径）
+    # android/ios 客户端不支持 cookiefile，跳过 cookie 注入
+    # 这些客户端可直接访问公开视频，无需认证
     cookie_file = os.path.join(os.getcwd(), 'cookies.txt')
     if os.path.exists(cookie_file):
-        # 创建临时副本，避免 yt-dlp 修改原始文件
-        import shutil
-        import tempfile
-        temp_cookie = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
-        temp_cookie_path = temp_cookie.name
-        temp_cookie.close()
-
-        shutil.copy(cookie_file, temp_cookie_path)
-        logger.info(f'get_info_list_from_url: 创建 cookie 临时副本: {temp_cookie_path}')
-
-        ydl_opts['cookiefile'] = temp_cookie_path
-        logger.info(f'get_info_list_from_url: 使用 cookies.txt 进行 YouTube 验证，原始路径: {cookie_file}')
-        # 检查文件大小
-        file_size = os.path.getsize(cookie_file)
-        logger.info(f'cookies.txt 文件大小: {file_size} 字节')
-
-        # 读取并验证 cookie 文件格式
-        try:
-            with open(cookie_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()[:10]  # 读取前10行
-                logger.info(f'cookies.txt 前3行内容:')
-                for i, line in enumerate(lines[:3]):
-                    # 显示制表符（\t）和换行符
-                    display_line = repr(line[:100])
-                    logger.info(f'  行{i+1}: {display_line}')
-
-                # 统计有效的 cookie 行（非注释、非空行）
-                valid_cookies = [l for l in lines if l.strip() and not l.strip().startswith('#')]
-                logger.info(f'cookies.txt 有效cookie行数: {len(valid_cookies)} (前10行中)')
-        except Exception as e:
-            logger.error(f'读取 cookies.txt 内容失败: {str(e)}')
+        logger.info(f'get_info_list_from_url: 检测到 cookies.txt（{os.path.getsize(cookie_file)} 字节），'
+                    f'但 android/ios 客户端不支持 cookiefile，跳过注入')
     else:
-        logger.warning(f'get_info_list_from_url: 未找到 cookies.txt，路径: {cookie_file}')
+        logger.info(f'get_info_list_from_url: 未找到 cookies.txt，使用 android/ios 客户端直接访问')
 
     logger.info(f'ydl_opts 最终配置: {ydl_opts}')
 
