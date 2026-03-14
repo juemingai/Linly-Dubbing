@@ -112,10 +112,10 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'fragment_retries': 10,
             'continuedl': True,
             'cookiefile': temp_cookie_path if use_cookie else None,
-            # 使用 mweb 客户端绕过 n-challenge EJS 解密问题
+            # android/ios 客户端无需 n-challenge 也无需 GVS PO Token
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['mweb', 'web']
+                    'player_client': ['android', 'ios']
                 }
             },
         }
@@ -237,10 +237,10 @@ def get_info_list_from_url(url, num_videos):
         'noplaylist': True,  # 强制只下载单个视频，忽略播放列表
         'quiet': False,  # 显示详细输出
         'no_warnings': False,  # 显示警告
-        # 使用 mweb 客户端绕过 n-challenge EJS 解密问题
+        # android/ios 客户端无需 n-challenge 也无需 GVS PO Token
         'extractor_args': {
             'youtube': {
-                'player_client': ['mweb', 'web']
+                'player_client': ['android', 'ios']
             }
         },
     }
