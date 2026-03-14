@@ -86,42 +86,34 @@ def main():
         print("⚠️  未找到下载代码，可能已修复")
 
     # 注释掉 SHA256 校验（模型 URL 重定向后文件版本可能不同导致校验失败）
-    sha256_old = '''\
-        if check_sha256:
-            sha256_hash = hashlib.sha256()
-            with open(model_fp, "rb") as f:
-                for byte_block in iter(lambda: f.read(65536), b""):
-                    sha256_hash.update(byte_block)
-            if sha256_hash.hexdigest() != sha256:
-                raise RuntimeError(
-                    "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
-                )'''
-    sha256_new = '''\
-        # SHA256 校验已跳过（模型 URL 重定向后文件版本可能不同，跳过以避免误报）
-        if False and check_sha256:
-            sha256_hash = hashlib.sha256()
-            with open(model_fp, "rb") as f:
-                for byte_block in iter(lambda: f.read(65536), b""):
-                    sha256_hash.update(byte_block)
-            if sha256_hash.hexdigest() != sha256:
-                raise RuntimeError(
-                    "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
-                )'''
+    sha256_patterns = [
+        # 旧版 whisperx：hashlib.sha256(model_bytes).hexdigest() != VAD_SEGMENTATION_URL.split(...)
+        (
+            'if hashlib.sha256(model_bytes).hexdigest() != VAD_SEGMENTATION_URL.split',
+            'if False and hashlib.sha256(model_bytes).hexdigest() != VAD_SEGMENTATION_URL.split',
+        ),
+        # 旧版 whisperx：if sha256_hash.hexdigest() != sha256:
+        (
+            'if sha256_hash.hexdigest() != sha256:',
+            'if False and sha256_hash.hexdigest() != sha256:  # 已跳过校验',
+        ),
+        # 旧版 whisperx：if check_sha256: 块
+        (
+            '        if check_sha256:\n            sha256_hash = hashlib.sha256()',
+            '        if False and check_sha256:  # 已跳过校验\n            sha256_hash = hashlib.sha256()',
+        ),
+    ]
 
-    if sha256_old in content:
-        content = content.replace(sha256_old, sha256_new)
-        print("✅ 已注释 SHA256 校验")
-    else:
-        # 尝试直接注释掉 RuntimeError 那行
-        sha256_raise = '                    "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."'
-        if sha256_raise in content:
-            content = content.replace(
-                'if sha256_hash.hexdigest() != sha256:',
-                'if False and sha256_hash.hexdigest() != sha256:  # 已跳过校验'
-            )
-            print("✅ 已跳过 SHA256 校验条件")
-        else:
-            print("⚠️  未找到 SHA256 校验代码，可能已修复或代码结构不同")
+    sha256_fixed = False
+    for old_pat, new_pat in sha256_patterns:
+        if old_pat in content:
+            content = content.replace(old_pat, new_pat)
+            print(f"✅ 已注释 SHA256 校验")
+            sha256_fixed = True
+            break
+
+    if not sha256_fixed:
+        print("⚠️  未找到 SHA256 校验代码，可能已修复或代码结构不同")
 
     with open(vad_file, 'w', encoding='utf-8') as f:
         f.write(content)
