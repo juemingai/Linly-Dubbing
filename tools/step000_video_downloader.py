@@ -129,6 +129,7 @@ def download_single_video(info, folder_path, resolution='1080p'):
             'fragment_retries': 10,
             'continuedl': True,
             'cookiefile': temp_cookie_path if use_cookie else None,
+            'remote_components': ['ejs:github'],  # 从 GitHub 下载最新 n-challenge solver
         }
         try:
             logger.info(f'尝试格式: {selector}')
@@ -221,6 +222,7 @@ def get_info_list_from_url(url, num_videos):
         'noplaylist': True,
         'quiet': False,
         'no_warnings': False,
+        'remote_components': ['ejs:github'],  # 从 GitHub 下载最新 n-challenge solver
     }
 
     if os.path.exists(cookie_file):
